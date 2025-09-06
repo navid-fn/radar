@@ -44,7 +44,6 @@ class KafkaClient:
     def start_sending_message(self, data, topic):
         producer = self.produce_client
         for d in data:
-            print(data[d])
             self.send_message(
                 producer,
                 key=d,

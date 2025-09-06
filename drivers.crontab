@@ -1,0 +1,4 @@
+* * * * * /usr/bin/python3 /app/main.py --driver 'bitpin' --url 'http://amazon.com/product/123'
+
+* * * * * /usr/bin/python3 /app/main.py --driver 'gowallex' --url 'http://somenews.com/latest'
+

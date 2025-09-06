@@ -1,3 +1,4 @@
+import json
 from kafka.client import KafkaClient
 
 
@@ -6,17 +7,25 @@ client = KafkaClient(group_id='test')
 
 topic = 'test_data'
 data = [
-    'crawl_data'
+    {
+        'id': 1,
+     'name': 'navid'
+     }
      for _ in range(10)
 ]
 
-for i, d in enumerate(data):
-    key = f'crawl_test_{i}'
-    data = {
-        key: d
-    }
-    client.start_sending_message(data, topic=topic)
+try:
+    for i, d in enumerate(data):
+        key = f'crawl_test_{i}'
+        value = json.dumps(d)
+        data = {
+            key: value
+        }
+        client.start_sending_message(data, topic=topic)
 
-data = client.start_consume(topic)
+    data = client.start_consume(topic)
 
-print(data)
+    print(data)
+except:
+    pass
+
