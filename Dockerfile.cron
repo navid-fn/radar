@@ -1,32 +1,24 @@
-FROM ubuntu:22.04
+# Use a lightweight Python base image
+FROM python:3.10-alpine
 
-ENV DEBIAN_FRONTEND=noninteractive
-
+# Set the working directory
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
-    cron \
-    python3 \
-    python3-pip \
-    gcc \
-    librdkafka-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Install cron AND all the build tools needed for confluent-kafka
+# musl-dev provides C library headers, python3-dev provides Python C extension headers
+# librdkafka-dev provides the actual Kafka C library headers
+RUN apk add --no-cache dcron gcc musl-dev python3-dev librdkafka-dev
 
+# Copy requirements file and install Python packages
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the application code
 COPY . .
 
-# Install Python packages using pip3
-RUN pip3 install --no-cache-dir -r requirements.txt
+# Copy the crontab file to the cron directory and set permissions
+COPY drivers.crontab /etc/crontabs/root
+RUN chmod 0644 /etc/crontabs/root
 
-COPY drivers.crontab /etc/cron.d/drivers-crontab
-
-COPY start_cron.sh /start_cron.sh
-RUN chmod +x /start_cron.sh
-
-RUN chmod 0644 /etc/cron.d/drivers-crontab
-
-# The command to start the cron daemon in the foreground.
-# Ubuntu's cron logs to syslog, which Docker captures by default.
-
-
-
-CMD ["/start_cron.sh"]
+# The command to run when the container starts
+CMD ["crond", "-f", "-l", "8"]

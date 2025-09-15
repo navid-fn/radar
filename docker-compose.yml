@@ -63,11 +63,17 @@ services:
         hard: 262144
     networks:
       - dev-network
-  cron-runner:
+
+  radar-go:
     build:
       context: .
-      dockerfile: Dockerfile.cron
-    container_name: cron-runner
+      dockerfile: Dockerfile.go
+    container_name: radar-go
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BROKER: "kafka:29092"
+    restart: unless-stopped
     networks:
       - dev-network
 
