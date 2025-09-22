@@ -2,6 +2,7 @@ import logging
 import os
 import json
 import hashlib
+import argparse
 
 from datetime import datetime
 from decimal import Decimal
@@ -48,6 +49,9 @@ def get_clickhouse_client():
         )
         raise
 
+def restart_database():
+    client = get_clickhouse_client()
+    client.execute(f"DROP DATABASE IF EXISTS {CLICKHOUSE_DB}")
 
 def setup_database(client):
     """
@@ -205,9 +209,10 @@ def main():
             if msg.error():
                 raise KafkaException(msg.error())
 
-            transformed_trades = parse_and_transform(msg.value().decode("utf-8"))
-            if transformed_trades:
-                batch.extend(transformed_trades)
+            if msg:
+                transformed_trades = parse_and_transform(msg.value().decode("utf-8"))
+                if transformed_trades:
+                    batch.extend(transformed_trades)
 
             if len(batch) >= BATCH_SIZE:
                 client.execute(insert_query, batch)
@@ -234,4 +239,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-r", "--drop_database", help="Recreate Database", action=argparse.BooleanOptionalAction)
+    args = parser.parse_args()
+    if args.drop_database:
+        restart_database()
+    else:
+        main()

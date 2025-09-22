@@ -64,19 +64,6 @@ services:
     networks:
       - dev-network
 
-  radar-go:
-    build:
-      context: .
-      dockerfile: Dockerfile.go
-    container_name: radar-go
-    depends_on:
-      - kafka
-    environment:
-      KAFKA_BROKER: "kafka:29092"
-    restart: unless-stopped
-    networks:
-      - dev-network
-
 volumes:
   zookeeper-data:
     driver: local

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,8 +21,8 @@ import (
 
 // Configuration constants
 const (
-	WallexAPIURL         = "https://api.wallex.ir/hector/web/v1/markets"
-	WallexWSURL          = "wss://api.wallex.ir/ws"
+	BitpinAPIURL         = "https://api.bitpin.ir/api/v1/mkt/markets/"
+	BitpinWSURL          = "wss://ws.bitpin.ir"
 	DefaultKafkaBroker   = "localhost:9092"
 	KafkaTopic           = "radar_trades"
 	MaxSubsPerConnection = 40
@@ -40,27 +41,18 @@ const (
 	HealthCheckInterval  = 5 * time.Second
 )
 
-// Market represents a trading market from the API
 type Market struct {
-	Symbol string `json:"symbol"`
+	Symbol    string `json:"symbol"`
+	Tradeable bool   `json:"tradable"`
 }
 
-// APIResponse represents the response from Wallex API
-type APIResponse struct {
-	Result struct {
-		Markets []Market `json:"markets"`
-	} `json:"result"`
-}
-
-// WallexProducer handles the main application logic
-type WallexProducer struct {
+type BitpinProducer struct {
 	kafkaProducer *kafka.Producer
 	logger        *logrus.Logger
 	kafkaBroker   string
 }
 
-// NewWallexProducer creates a new instance of WallexProducer
-func NewWallexProducer() *WallexProducer {
+func NewBitpinProducer() *BitpinProducer {
 	logger := logrus.New()
 	logger.SetLevel(logrus.InfoLevel)
 	logger.SetFormatter(&logrus.TextFormatter{
@@ -72,14 +64,14 @@ func NewWallexProducer() *WallexProducer {
 		kafkaBroker = DefaultKafkaBroker
 	}
 
-	return &WallexProducer{
+	return &BitpinProducer{
 		logger:      logger,
 		kafkaBroker: kafkaBroker,
 	}
 }
 
 // initKafkaProducer initializes the Kafka producer
-func (wp *WallexProducer) initKafkaProducer() error {
+func (wp *BitpinProducer) initKafkaProducer() error {
 	config := kafka.ConfigMap{
 		"bootstrap.servers": wp.kafkaBroker,
 	}
@@ -94,11 +86,10 @@ func (wp *WallexProducer) initKafkaProducer() error {
 	return nil
 }
 
-// getMarkets fetches all trading markets from Wallex API
-func (wp *WallexProducer) getMarkets() ([]string, error) {
-	resp, err := http.Get(WallexAPIURL)
+func (wp *BitpinProducer) getMarkets() ([]string, error) {
+	resp, err := http.Get(BitpinAPIURL)
 	if err != nil {
-		return nil, fmt.Errorf("error fetching markets from Wallex API: %w", err)
+		return nil, fmt.Errorf("error fetching markets from Bitpin API: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -106,25 +97,32 @@ func (wp *WallexProducer) getMarkets() ([]string, error) {
 		return nil, fmt.Errorf("API returned status code: %d", resp.StatusCode)
 	}
 
-	var apiResponse APIResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
+	body, err := io.ReadAll(resp.Body)
+
+	if err != nil {
 		return nil, fmt.Errorf("error decoding API response: %w", err)
 	}
+	var apiResponse []Market
+	err = json.Unmarshal(body, &apiResponse)
 
-	markets := make([]string, len(apiResponse.Result.Markets))
-	for i, market := range apiResponse.Result.Markets {
-		markets[i] = market.Symbol
+	if err != nil {
+		return nil, fmt.Errorf("error UnMarshaling: %w", err)
 	}
 
-	// Sort for consistent chunking
+	var markets []string
+	for _, market := range apiResponse {
+		if market.Tradeable {
+			markets = append(markets, market.Symbol)
+		}
+	}
+
 	sort.Strings(markets)
 
-	wp.logger.Infof("Fetched %d unique markets from Wallex API", len(markets))
+	wp.logger.Infof("Fetched %d unique markets from Bitpin API", len(markets))
 	return markets, nil
 }
 
-// chunkMarkets splits markets into smaller chunks
-func (wp *WallexProducer) chunkMarkets(markets []string, chunkSize int) [][]string {
+func (wp *BitpinProducer) chunkMarkets(markets []string, chunkSize int) [][]string {
 	var chunks [][]string
 	for i := 0; i < len(markets); i += chunkSize {
 		end := i + chunkSize
@@ -136,8 +134,7 @@ func (wp *WallexProducer) chunkMarkets(markets []string, chunkSize int) [][]stri
 	return chunks
 }
 
-// deliveryReport handles Kafka message delivery reports
-func (wp *WallexProducer) deliveryReport() {
+func (wp *BitpinProducer) deliveryReport() {
 	go func() {
 		for e := range wp.kafkaProducer.Events() {
 			switch ev := e.(type) {
@@ -150,8 +147,7 @@ func (wp *WallexProducer) deliveryReport() {
 	}()
 }
 
-// websocketWorker manages a single WebSocket connection for a chunk of symbols
-func (wp *WallexProducer) websocketWorker(ctx context.Context, symbolsChunk []string, wg *sync.WaitGroup) {
+func (wp *BitpinProducer) websocketWorker(ctx context.Context, symbolsChunk []string, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	workerID := fmt.Sprintf("Worker-%s", symbolsChunk[0])
@@ -200,9 +196,8 @@ func (wp *WallexProducer) websocketWorker(ctx context.Context, symbolsChunk []st
 	}
 }
 
-// handleWebSocketConnection handles a single WebSocket connection lifecycle
-func (wp *WallexProducer) handleWebSocketConnection(ctx context.Context, workerID string, symbolsChunk []string) error {
-	u, err := url.Parse(WallexWSURL)
+func (wp *BitpinProducer) handleWebSocketConnection(ctx context.Context, workerID string, symbolsChunk []string) error {
+	u, err := url.Parse(BitpinWSURL)
 	if err != nil {
 		return fmt.Errorf("invalid WebSocket URL: %w", err)
 	}
@@ -246,14 +241,16 @@ func (wp *WallexProducer) handleWebSocketConnection(ctx context.Context, workerI
 		return err
 	})
 
-	// Subscribe to all symbols in this chunk
+	// Subscribe to all symbols in this chunk (BitPin format)
 	wp.logger.Infof("[%s] Subscribing to %d markets...", workerID, len(symbolsChunk))
-	for _, symbol := range symbolsChunk {
-		conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
-		subscriptionMsg := []interface{}{"subscribe", map[string]string{"channel": fmt.Sprintf("%s@trade", symbol)}}
-		if err := conn.WriteJSON(subscriptionMsg); err != nil {
-			return fmt.Errorf("failed to send subscription message: %w", err)
-		}
+	subscriptionMsg := map[string]interface{}{
+		"method":  "sub_to_market_data",
+		"symbols": symbolsChunk,
+	}
+
+	conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
+	if err := conn.WriteJSON(subscriptionMsg); err != nil {
+		return fmt.Errorf("failed to send subscription message: %w", err)
 	}
 	wp.logger.Infof("[%s] Subscriptions sent", workerID)
 
@@ -316,6 +313,13 @@ func (wp *WallexProducer) handleWebSocketConnection(ctx context.Context, workerI
 			}
 
 		case message := <-messages:
+			// Check for PONG messages (like in Python version)
+			messageStr := string(message)
+			if messageStr == `{"message":"PONG"}` {
+				wp.logger.Infof("[%s] < PONG received", workerID)
+				continue
+			}
+
 			// Send message to Kafka
 			topic := KafkaTopic
 			err = wp.kafkaProducer.Produce(&kafka.Message{
@@ -357,7 +361,7 @@ func (wp *WallexProducer) handleWebSocketConnection(ctx context.Context, workerI
 }
 
 // Run starts the main application
-func (wp *WallexProducer) Run() error {
+func (wp *BitpinProducer) Run() error {
 	// Initialize Kafka producer
 	if err := wp.initKafkaProducer(); err != nil {
 		return fmt.Errorf("failed to initialize Kafka producer: %w", err)
@@ -410,7 +414,7 @@ func (wp *WallexProducer) Run() error {
 }
 
 func main() {
-	producer := NewWallexProducer()
+	producer := NewBitpinProducer()
 
 	if err := producer.Run(); err != nil {
 		producer.logger.Fatalf("Application failed: %v", err)
