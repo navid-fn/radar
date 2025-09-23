@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # BitPin Producer
+  bitpin-producer:
+    build:
+      context: .
+      dockerfile: Dockerfile.bitpin
+    image: bitpin-producer:latest
+    container_name: bitpin-producer
+    restart: unless-stopped
+    environment:
+      - KAFKA_BROKER=${KAFKA_BROKER:-localhost:9092}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DATA_DIR=/app/data
+      - HEALTH_PORT=8080
+    volumes:
+      - ./bitpin-data:/app/data
+    ports:
+      - "8080:8080"
+    network_mode: "host"  # Use host network to access localhost:9092
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # Wallex Producer  
+  wallex-producer:
+    build:
+      context: .
+      dockerfile: Dockerfile.wallex
+    image: wallex-producer:latest
+    container_name: wallex-producer
+    restart: unless-stopped
+    environment:
+      - KAFKA_BROKER=${KAFKA_BROKER:-localhost:9092}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DATA_DIR=/app/data
+      - HEALTH_PORT=8081  # Different port to avoid conflicts
+    volumes:
+      - ./wallex-data:/app/data
+    ports:
+      - "8081:8081"  # Map to different host port
+    network_mode: "host"  # Use host network to access localhost:9092
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+# Note: Using external Kafka running on host:9092
+# No Kafka services needed in Docker Compose

@@ -1,0 +1,31 @@
+# Git
+.git/
+.gitignore
+
+# Documentation
+README*.md
+*.md
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Binaries
+bitpin-producer
+*.exe
+
+# Test files
+*_test.go
+
+# Temporary files
+*.tmp
+*.temp

@@ -9,3 +9,5 @@ require (
 )
 
 require golang.org/x/sys v0.25.0 // indirect
+
+replace github.com/navid-fn/radar/pkg => ../pkg
