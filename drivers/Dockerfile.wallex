@@ -15,11 +15,8 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy go mod files for both pkg and wallex
-COPY pkg/go.mod ./pkg/
 COPY wallex/go.mod wallex/go.sum ./wallex/
 
-# Copy pkg source code
-COPY pkg/ ./pkg/
 
 # Change to wallex directory and download dependencies
 WORKDIR /app/wallex
@@ -40,7 +37,6 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     librdkafka1 \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
@@ -63,14 +59,9 @@ USER appuser
 ENV KAFKA_BROKER=localhost:9092
 ENV LOG_LEVEL=info
 ENV DATA_DIR=/app/data
-ENV HEALTH_PORT=8081
 
-# Expose health check port
-EXPOSE 8081
 
 # Enhanced health check using HTTP endpoint
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8081/health/ready || exit 1
 
 # Run the application
 CMD ["./wallex-producer"]

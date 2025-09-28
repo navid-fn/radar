@@ -18,7 +18,7 @@ type Market struct {
 	TabdealSymbol string `json:"tabdealSymbol"`
 }
 
-func getTabdealMarkets() ([]Market ,error) {
+func getTabdealMarkets() ([]Market, error) {
 	url := "https://api1.tabdeal.org/r/api/v1/exchangeInfo"
 	resp, err := http.Get(url)
 	if err != nil {

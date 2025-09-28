@@ -10,14 +10,12 @@ import (
 	"os"
 	"os/signal"
 	"sort"
-	"strconv"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/gorilla/websocket"
-	"github.com/navid-fn/radar/pkg/faulttolerance"
 	"github.com/sirupsen/logrus"
 )
 
@@ -52,11 +50,6 @@ type BitpinProducer struct {
 	kafkaProducer     *kafka.Producer
 	logger            *logrus.Logger
 	kafkaBroker       string
-	apiCircuitBreaker *faulttolerance.CircuitBreaker
-	wsCircuitBreaker  *faulttolerance.CircuitBreaker
-	retryer           *faulttolerance.Retryer
-	healthMonitor     *faulttolerance.HealthMonitor
-	persistence       *faulttolerance.PersistenceManager
 }
 
 func NewBitpinProducer() *BitpinProducer {
@@ -71,51 +64,15 @@ func NewBitpinProducer() *BitpinProducer {
 		kafkaBroker = DefaultKafkaBroker
 	}
 
-	// Initialize circuit breakers
-	apiCircuitBreaker := faulttolerance.NewCircuitBreaker(
-		faulttolerance.CircuitBreakerConfig{
-			MaxFailures:      5,
-			Timeout:          60 * time.Second,
-			SuccessThreshold: 3,
-			Name:             "BitpinAPI",
-		}, logger)
-
-	wsCircuitBreaker := faulttolerance.NewCircuitBreaker(
-		faulttolerance.CircuitBreakerConfig{
-			MaxFailures:      3,
-			Timeout:          30 * time.Second,
-			SuccessThreshold: 2,
-			Name:             "BitpinWebSocket",
-		}, logger)
-
-	// Initialize retryer
-	retryConfig := faulttolerance.DefaultRetryConfig("BitpinOperations")
-	retryConfig.MaxAttempts = 3
-	retryConfig.BaseDelay = 2 * time.Second
-	retryer := faulttolerance.NewRetryer(retryConfig, logger)
-
-	// Initialize health monitor
-	healthMonitor := faulttolerance.NewHealthMonitor(logger, 30*time.Second)
-
 	// Initialize persistence manager
 	dataDir := os.Getenv("DATA_DIR")
 	if dataDir == "" {
 		dataDir = "./data"
 	}
-	persistence, err := faulttolerance.NewPersistenceManager(dataDir, 1000, 10*time.Second, logger)
-	if err != nil {
-		logger.Errorf("Failed to initialize persistence manager: %v", err)
-		persistence = nil
-	}
 
 	return &BitpinProducer{
 		logger:            logger,
 		kafkaBroker:       kafkaBroker,
-		apiCircuitBreaker: apiCircuitBreaker,
-		wsCircuitBreaker:  wsCircuitBreaker,
-		retryer:           retryer,
-		healthMonitor:     healthMonitor,
-		persistence:       persistence,
 	}
 }
 
@@ -138,41 +95,35 @@ func (wp *BitpinProducer) initKafkaProducer() error {
 func (wp *BitpinProducer) getMarkets() ([]string, error) {
 	var markets []string
 
-	err := wp.retryer.ExecuteWithCircuitBreaker(context.Background(), wp.apiCircuitBreaker, func() error {
-		resp, err := http.Get(BitpinAPIURL)
-		if err != nil {
-			return fmt.Errorf("error fetching markets from Bitpin API: %w", err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("API returned status code: %d", resp.StatusCode)
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("error reading API response: %w", err)
-		}
-
-		var apiResponse []Market
-		if err = json.Unmarshal(body, &apiResponse); err != nil {
-			return fmt.Errorf("error unmarshaling API response: %w", err)
-		}
-
-		markets = nil // Reset markets slice
-		for _, market := range apiResponse {
-			if market.Tradeable {
-				markets = append(markets, market.Symbol)
-			}
-		}
-
-		sort.Strings(markets)
-		return nil
-	})
-
+	resp, err := http.Get(BitpinAPIURL)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error fetching markets from Bitpin API: %w", err)
 	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API returned status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading API response: %w", err)
+	}
+
+	var apiResponse []Market
+	if err = json.Unmarshal(body, &apiResponse); err != nil {
+		return nil, fmt.Errorf("error unmarshaling API response: %w", err)
+	}
+
+	markets = nil // Reset markets slice
+
+	for _, market := range apiResponse {
+		if market.Tradeable {
+			markets = append(markets, market.Symbol)
+		}
+	}
+
+	sort.Strings(markets)
 
 	wp.logger.Infof("Fetched %d unique markets from Bitpin API", len(markets))
 	return markets, nil
@@ -375,12 +326,6 @@ func (wp *BitpinProducer) handleWebSocketConnection(ctx context.Context, workerI
 
 			if err != nil {
 				wp.logger.Errorf("[%s] Failed to produce message to Kafka: %v", workerID, err)
-
-				// Store message for later retry if persistence is available
-				if wp.persistence != nil {
-					wp.persistence.StoreMessage(message)
-					wp.logger.Debugf("[%s] Message stored for later retry", workerID)
-				}
 			}
 
 		case <-pingTicker.C:
@@ -413,41 +358,11 @@ func (wp *BitpinProducer) handleWebSocketConnection(ctx context.Context, workerI
 }
 
 func (wp *BitpinProducer) Run() error {
-	wp.logger.Info("Starting BitPin Producer with fault tolerance...")
-
-	// Start persistence manager if available
-	if wp.persistence != nil {
-		wp.persistence.Start()
-		defer wp.persistence.Stop()
-
-		// Attempt to recover messages from previous runs
-		if recoveredMessages, err := wp.persistence.RecoverMessages(24 * time.Hour); err == nil && len(recoveredMessages) > 0 {
-			wp.logger.Infof("Recovered %d messages from previous runs", len(recoveredMessages))
-			// TODO: Implement message replay logic
-		}
+	wp.logger.Info("Starting BitPin Producer...")
+	if err := wp.initKafkaProducer(); err != nil {
+		return fmt.Errorf("failed to initialize Kafka producer: %w", err)
 	}
 
-	// Start health monitor
-	wp.setupHealthChecks()
-	wp.healthMonitor.Start()
-	defer wp.healthMonitor.Stop()
-
-	// Start health check HTTP server
-	healthPort := 8080
-	if portStr := os.Getenv("HEALTH_PORT"); portStr != "" {
-		if p, err := strconv.Atoi(portStr); err == nil {
-			healthPort = p
-		}
-	}
-	wp.healthMonitor.StartHTTPServer(healthPort)
-
-	// Initialize Kafka producer with retries
-	err := wp.retryer.Execute(context.Background(), func() error {
-		return wp.initKafkaProducer()
-	})
-	if err != nil {
-		return fmt.Errorf("failed to initialize Kafka producer after retries: %w", err)
-	}
 	defer wp.kafkaProducer.Close()
 
 	wp.deliveryReport()
@@ -478,25 +393,7 @@ func (wp *BitpinProducer) Run() error {
 	}()
 
 	// Start periodic cleanup of old persistence files
-	if wp.persistence != nil {
-		go func() {
-			ticker := time.NewTicker(1 * time.Hour)
-			defer ticker.Stop()
 
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-ticker.C:
-					if err := wp.persistence.CleanupOldFiles(7 * 24 * time.Hour); err != nil {
-						wp.logger.Warnf("Failed to cleanup old persistence files: %v", err)
-					}
-				}
-			}
-		}()
-	}
-
-	// Start workers with staggered startup to avoid overwhelming the server
 	var wg sync.WaitGroup
 	for i, chunk := range marketChunks {
 		wg.Add(1)
@@ -513,68 +410,6 @@ func (wp *BitpinProducer) Run() error {
 	wp.logger.Info("All workers completed")
 
 	return nil
-}
-
-func (wp *BitpinProducer) setupHealthChecks() {
-	wp.healthMonitor.AddCheck("kafka", func(ctx context.Context) error {
-		if wp.kafkaProducer == nil {
-			return fmt.Errorf("kafka producer not initialized")
-		}
-
-		metadata, err := wp.kafkaProducer.GetMetadata(nil, false, 5000)
-		if err != nil {
-			return fmt.Errorf("failed to get kafka metadata: %w", err)
-		}
-
-		if len(metadata.Brokers) == 0 {
-			return fmt.Errorf("no kafka brokers available")
-		}
-
-		return nil
-	})
-
-	wp.healthMonitor.AddCheck("bitpin_api", func(ctx context.Context) error {
-		return wp.apiCircuitBreaker.Execute(ctx, func() error {
-			client := &http.Client{Timeout: 10 * time.Second}
-			resp, err := client.Get(BitpinAPIURL)
-			if err != nil {
-				return err
-			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode != http.StatusOK {
-				return fmt.Errorf("API returned status %d", resp.StatusCode)
-			}
-
-			return nil
-		})
-	})
-
-	wp.healthMonitor.AddCheck("api_circuit_breaker", func(ctx context.Context) error {
-		state := wp.apiCircuitBreaker.GetState()
-		if state == faulttolerance.StateOpen {
-			return fmt.Errorf("API circuit breaker is open")
-		}
-		return nil
-	})
-
-	wp.healthMonitor.AddCheck("ws_circuit_breaker", func(ctx context.Context) error {
-		state := wp.wsCircuitBreaker.GetState()
-		if state == faulttolerance.StateOpen {
-			return fmt.Errorf("WebSocket circuit breaker is open")
-		}
-		return nil
-	})
-
-	if wp.persistence != nil {
-		wp.healthMonitor.AddCheck("persistence", func(ctx context.Context) error {
-			stats := wp.persistence.GetStats()
-			if bufferSize, ok := stats["buffer_size"].(int); ok && bufferSize > 900 {
-				return fmt.Errorf("persistence buffer nearly full: %d", bufferSize)
-			}
-			return nil
-		})
-	}
 }
 
 func main() {

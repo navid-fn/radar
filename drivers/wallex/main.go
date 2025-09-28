@@ -29,7 +29,7 @@ const (
 	// Connection timeouts and intervals
 	InitialReconnectDelay = 1 * time.Second
 	MaxReconnectDelay     = 30 * time.Second
-	HandshakeTimeout      = 10 * time.Second
+	HandshakeTimeout      = 4 * time.Second
 	ReadTimeout           = 60 * time.Second
 	WriteTimeout          = 10 * time.Second
 	PingInterval          = 30 * time.Second
@@ -128,7 +128,7 @@ func (wp *WallexProducer) chunkMarkets(markets []string, chunkSize int) [][]stri
 	var chunks [][]string
 	for i := 0; i < len(markets); i += chunkSize {
 		end := i + chunkSize
-		if end > len(markets) {
+		if min(end, len(markets)) != end {
 			end = len(markets)
 		}
 		chunks = append(chunks, markets[i:end])
