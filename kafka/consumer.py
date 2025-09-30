@@ -148,6 +148,39 @@ def _transform_bitpin_matches(data):
         logging.error(f"Failed to transform Bitpin matches. Error: {e}. Data: {data}")
         return []
 
+def _transform_tabdeal_matches(data):
+    """Transforms a trade message from the Bitpin 'matches_update' format.
+    {'id': 159176050, 'price': '8161.0000000000000000', 'qty': '7.35120000',
+    'quoteqty': '7.33061664', 'isBuyerMaker': False, 'symbol': 'CTSIIRT',
+    'exchange': 'tabdeal', 'time': '2025-09-28T19:42:31.117+03:30'}
+    """
+    try:
+
+        symbol = data.get("symbol")
+        side = "buy" if data.get("isBuyerMaker", False) else "sell"
+        price_str = data.get("price", "0.0")
+        quantity_str = data.get(
+            "qty", "0.0"
+        )
+        time = data.get("time")
+        trade_id = str(data.get('id'))
+
+        event_time = datetime.fromisoformat(time)
+
+        row = (
+            trade_id,
+            "tabdeal",
+            symbol,
+            side,
+            float(price_str),
+            float(quantity_str),
+            Decimal(price_str) * Decimal(quantity_str),
+            event_time,
+        )
+        return [row]  # Return as a list for consistency
+    except Exception as e:
+        logging.error(f"Failed to transform Wallex trade. Error: {e}. Data: {data}")
+        return []
 
 def parse_and_transform(message_value):
     """
@@ -160,6 +193,8 @@ def parse_and_transform(message_value):
             return _transform_wallex_trade(data)
         elif isinstance(data, dict) and data.get("event") == "matches_update":
             return _transform_bitpin_matches(data)
+        elif isinstance(data, dict) and data.get('exchange') == 'tabdeal':
+            return _transform_tabdeal_matches(data)
         else:
             return []
     except Exception as e:
