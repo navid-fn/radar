@@ -177,7 +177,7 @@ func main() {
 			Value:          res,
 		}, nil)
 		if err != nil {
-			fmt.Println("Error in sending to kafka: %s", err)
+			fmt.Println("Error in sending to kafka:", err)
 		}
 	}
 }

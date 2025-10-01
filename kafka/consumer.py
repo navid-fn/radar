@@ -3,6 +3,7 @@ import os
 import json
 import hashlib
 import argparse
+import time
 
 from datetime import datetime
 from decimal import Decimal
@@ -182,6 +183,35 @@ def _transform_tabdeal_matches(data):
         logging.error(f"Failed to transform Wallex trade. Error: {e}. Data: {data}")
         return []
 
+def _transform_ramzinex_matches(data):
+    """
+    {
+    'channel': 'last-trades:bitcoin/rial', 
+    'data': [[132622066875, 1.6e-05, '2025-10-01 12:09:05', 'sell', 1759320545, 'dfaef1dead062f3053a1ce68753ccc4c']]
+    }
+
+    """
+    try:
+        symbol = data.get('channel').split('last-trades:')[1]
+        transformed_rows = []
+        for trade in data.get('data'):
+            row = (
+                trade[5],
+                'ramzinex',
+                symbol,
+                trade[3],
+                float(trade[0]),
+                Decimal(trade[1]),
+                Decimal(trade[0]) * Decimal(trade[1]),
+                datetime.fromisoformat(trade[2])
+            )
+            transformed_rows.append(row)
+        return transformed_rows
+
+    except Exception as e:
+        logging.error(f"Failed to transform Wallex trade. Error: {e}. Data: {data}")
+        return []
+
 def parse_and_transform(message_value):
     """
     Inspects the message format and routes it to the correct transformation function.
@@ -195,6 +225,8 @@ def parse_and_transform(message_value):
             return _transform_bitpin_matches(data)
         elif isinstance(data, dict) and data.get('exchange') == 'tabdeal':
             return _transform_tabdeal_matches(data)
+        elif isinstance(data, dict) and data.get('channel'):
+            return _transform_ramzinex_matches(data)
         else:
             return []
     except Exception as e:
