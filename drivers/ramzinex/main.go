@@ -72,6 +72,52 @@ type RamzinexProducer struct {
 	kafkaProducer *kafka.Producer
 	logger        *logrus.Logger
 	kafkaBroker   string
+	tradeTracker  *TradeTracker
+}
+
+type TradeTracker struct {
+	seenTradeHashes map[string]map[string]bool
+	mu              sync.RWMutex
+}
+
+func newTradeTracker() *TradeTracker {
+	return &TradeTracker{
+		seenTradeHashes: make(map[string]map[string]bool),
+	}
+}
+
+func (tt *TradeTracker) isTradeProcessed(channel string, tradeHash string) bool {
+	tt.mu.RLock()
+	defer tt.mu.RUnlock()
+
+	if channelMap, exists := tt.seenTradeHashes[channel]; exists {
+		return channelMap[tradeHash]
+	}
+	return false
+}
+
+func (tt *TradeTracker) markTradeProcessed(channel string, tradeHash string) {
+	tt.mu.Lock()
+	defer tt.mu.Unlock()
+
+	if tt.seenTradeHashes[channel] == nil {
+		tt.seenTradeHashes[channel] = make(map[string]bool)
+	}
+	tt.seenTradeHashes[channel][tradeHash] = true
+
+	// Keep only last 1000 hashes per channel to prevent memory growth
+	if len(tt.seenTradeHashes[channel]) > 1000 {
+		// Remove oldest entries (simple approach: clear and keep recent)
+		count := 0
+		for hash := range tt.seenTradeHashes[channel] {
+			if count < 500 {
+				delete(tt.seenTradeHashes[channel], hash)
+				count++
+			} else {
+				break
+			}
+		}
+	}
 }
 
 func NewRamzinexProducer() *RamzinexProducer {
@@ -87,8 +133,9 @@ func NewRamzinexProducer() *RamzinexProducer {
 	}
 
 	return &RamzinexProducer{
-		logger:      logger,
-		kafkaBroker: kafkaBroker,
+		logger:       logger,
+		kafkaBroker:  kafkaBroker,
+		tradeTracker: newTradeTracker(),
 	}
 }
 
@@ -170,6 +217,52 @@ func (rp *RamzinexProducer) deliveryReport() {
 	}()
 }
 
+func (rp *RamzinexProducer) filterDuplicateTrades(channel string, data any, workerID string) []interface{} {
+	var filteredTrades []any
+
+	// Data should be an array of trade arrays
+	tradesArray, ok := data.([]any)
+	if !ok {
+		return filteredTrades
+	}
+
+	totalTrades := len(tradesArray)
+	duplicatesCount := 0
+
+	for _, trade := range tradesArray {
+		tradeArray, ok := trade.([]any)
+		if !ok || len(tradeArray) < 6 {
+			// Invalid trade format, skip
+			continue
+		}
+
+		// Extract hash from index 5
+		tradeHash, ok := tradeArray[5].(string)
+		if !ok || tradeHash == "" {
+			// No hash available, include the trade (better to send than lose data)
+			filteredTrades = append(filteredTrades, trade)
+			continue
+		}
+
+		// Check if already processed
+		if rp.tradeTracker.isTradeProcessed(channel, tradeHash) {
+			duplicatesCount++
+			continue
+		}
+
+		// Mark as processed and include in filtered trades
+		rp.tradeTracker.markTradeProcessed(channel, tradeHash)
+		filteredTrades = append(filteredTrades, trade)
+	}
+
+	if duplicatesCount > 0 {
+		rp.logger.Infof("[%s] Channel %s - Filtered %d duplicates out of %d trades, sending %d unique trades",
+			workerID, channel, duplicatesCount, totalTrades, len(filteredTrades))
+	}
+
+	return filteredTrades
+}
+
 func (rp *RamzinexProducer) websocketWorker(ctx context.Context, pairsChunk []PairDetail, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -242,7 +335,7 @@ func (rp *RamzinexProducer) handleWebSocketConnection(ctx context.Context, worke
 	defer connCancel()
 
 	// Send connect message as required by Ramzinex (Centrifuge protocol)
-	connectMsg := map[string]interface{}{
+	connectMsg := map[string]any{
 		"connect": map[string]string{
 			"name": "js",
 		},
@@ -268,9 +361,9 @@ func (rp *RamzinexProducer) handleWebSocketConnection(ctx context.Context, worke
 	subscriptionID := 2
 	for _, pair := range pairsChunk {
 		channel := fmt.Sprintf("last-trades:%d", pair.ID)
-		subscriptionMsg := map[string]interface{}{
+		subscriptionMsg := map[string]any{
 			"id": subscriptionID,
-			"subscribe": map[string]interface{}{
+			"subscribe": map[string]any{
 				"channel": channel,
 				"recover": true,
 			},
@@ -367,7 +460,7 @@ func (rp *RamzinexProducer) handleWebSocketConnection(ctx context.Context, worke
 			if messageStr == "{}" || messageStr == "{}\n" || len(strings.TrimSpace(messageStr)) == 2 {
 				// Respond with pong
 				conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
-				pongMsg := map[string]interface{}{}
+				pongMsg := map[string]any{}
 				if err := conn.WriteJSON(pongMsg); err != nil {
 					rp.logger.Errorf("[%s] Failed to send pong: %v", workerID, err)
 				}
@@ -375,7 +468,7 @@ func (rp *RamzinexProducer) handleWebSocketConnection(ctx context.Context, worke
 			}
 
 			// Parse message
-			var msgCheck map[string]interface{}
+			var msgCheck map[string]any
 			if err := json.Unmarshal(message, &msgCheck); err == nil {
 				// Check if it's an error message
 				if errMsg, hasError := msgCheck["error"]; hasError {
@@ -384,8 +477,8 @@ func (rp *RamzinexProducer) handleWebSocketConnection(ctx context.Context, worke
 				}
 
 				// Check if it's a push message with trade data
-				if pushData, hasPush := msgCheck["push"].(map[string]interface{}); hasPush {
-					if pub, hasPub := pushData["pub"].(map[string]interface{}); hasPub {
+				if pushData, hasPush := msgCheck["push"].(map[string]any); hasPush {
+					if pub, hasPub := pushData["pub"].(map[string]any); hasPub {
 						if data, hasData := pub["data"]; hasData {
 							// Extract channel and replace ID with Name
 							if channelStr, ok := pushData["channel"].(string); ok {
@@ -395,21 +488,28 @@ func (rp *RamzinexProducer) handleWebSocketConnection(ctx context.Context, worke
 									var pairID int
 									if _, err := fmt.Sscanf(parts[1], "%d", &pairID); err == nil {
 										if pairName, found := pairIDToName[pairID]; found {
-											// Create new message with pair name
-											kafkaMsg := map[string]interface{}{
-												"channel": fmt.Sprintf("last-trades:%s", pairName),
-												"data":    data,
-											}
+											channelName := fmt.Sprintf("last-trades:%s", pairName)
 
-											kafkaMsgBytes, _ := json.Marshal(kafkaMsg)
-											topic := KafkaTopic
-											err = rp.kafkaProducer.Produce(&kafka.Message{
-												TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
-												Value:          kafkaMsgBytes,
-											}, nil)
+											// Filter duplicate trades
+											filteredTrades := rp.filterDuplicateTrades(channelName, data, workerID)
 
-											if err != nil {
-												rp.logger.Errorf("[%s] Failed to send to Kafka: %v", workerID, err)
+											if len(filteredTrades) > 0 {
+												// Create new message with pair name and filtered data
+												kafkaMsg := map[string]any{
+													"channel": channelName,
+													"data":    filteredTrades,
+												}
+
+												kafkaMsgBytes, _ := json.Marshal(kafkaMsg)
+												topic := KafkaTopic
+												err = rp.kafkaProducer.Produce(&kafka.Message{
+													TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
+													Value:          kafkaMsgBytes,
+												}, nil)
+
+												if err != nil {
+													rp.logger.Errorf("[%s] Failed to send to Kafka: %v", workerID, err)
+												}
 											}
 											continue
 										}
