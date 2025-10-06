@@ -16,18 +16,43 @@ services:
     volumes:
       - ./bitpin-data:/app/data
 
-  # Wallex Producer  
-  wallex-producer:
+  # Wallex Trades Producer (real-time trades)
+  wallex-trades:
     build:
       context: .
       dockerfile: Dockerfile.wallex
     image: wallex-producer:latest
-    container_name: wallex-producer
+    container_name: wallex-trades
     restart: unless-stopped
+    network_mode: "host"
     environment:
-      - KAFKA_BROKER=${KAFKA_BROKER:-localhost:9092}
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - DATA_DIR=/app/data
-    volumes:
-      - ./wallex-data:/app/data
+      - KAFKA_BROKER=localhost:9092
+      - LOG_LEVEL=info
+    command: ["./wallex-producer", "-mode", "trades"]
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "wallex-producer"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Wallex Depth Producer (throttled orderbook depth)
+  wallex-depth:
+    build:
+      context: .
+      dockerfile: Dockerfile.wallex
+    image: wallex-producer:latest
+    container_name: wallex-depth
+    restart: unless-stopped
+    network_mode: "host"
+    environment:
+      - KAFKA_BROKER=localhost:9092
+      - LOG_LEVEL=info
+    command: ["./wallex-producer", "-mode", "depth", "-throttle", "7"]
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "wallex-producer"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
       

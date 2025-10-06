@@ -14,16 +14,17 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Copy go mod files for both pkg and wallex
+# Copy go mod files
 COPY wallex/go.mod wallex/go.sum ./wallex/
-
 
 # Change to wallex directory and download dependencies
 WORKDIR /app/wallex
 RUN go mod download
 
-# Copy wallex source code
+# Copy wallex source code (including trades and depth packages)
 COPY wallex/main.go .
+COPY wallex/trades ./trades
+COPY wallex/depth ./depth
 
 # Build the application
 RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
@@ -60,8 +61,5 @@ ENV KAFKA_BROKER=localhost:9092
 ENV LOG_LEVEL=info
 ENV DATA_DIR=/app/data
 
-
-# Enhanced health check using HTTP endpoint
-
-# Run the application
-CMD ["./wallex-producer"]
+# Default command (can be overridden in docker-compose)
+CMD ["./wallex-producer", "-mode", "trades"]

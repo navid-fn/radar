@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"sort"
@@ -14,30 +14,16 @@ import (
 	"time"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
-	"github.com/gorilla/websocket"
+	"github.com/navid-fn/radar/depth"
+	"github.com/navid-fn/radar/trades"
 	"github.com/sirupsen/logrus"
 )
 
 // Configuration constants
 const (
 	WallexAPIURL         = "https://api.wallex.ir/hector/web/v1/markets"
-	WallexWSURL          = "wss://api.wallex.ir/ws"
 	DefaultKafkaBroker   = "localhost:9092"
-	KafkaTopic           = "radar_trades"
 	MaxSubsPerConnection = 40
-
-	// Connection timeouts and intervals
-	InitialReconnectDelay = 1 * time.Second
-	MaxReconnectDelay     = 30 * time.Second
-	HandshakeTimeout      = 4 * time.Second
-	ReadTimeout           = 60 * time.Second
-	WriteTimeout          = 10 * time.Second
-	PingInterval          = 30 * time.Second
-	PongTimeout           = 10 * time.Second
-
-	// Connection health
-	MaxConsecutiveErrors = 5
-	HealthCheckInterval  = 5 * time.Second
 )
 
 // Market represents a trading market from the API
@@ -54,13 +40,16 @@ type APIResponse struct {
 
 // WallexProducer handles the main application logic
 type WallexProducer struct {
-	kafkaProducer *kafka.Producer
-	logger        *logrus.Logger
-	kafkaBroker   string
+	mode             string
+	kafkaTopic       string
+	kafkaProducer    *kafka.Producer
+	logger           *logrus.Logger
+	kafkaBroker      string
+	throttleInterval time.Duration
 }
 
 // NewWallexProducer creates a new instance of WallexProducer
-func NewWallexProducer() *WallexProducer {
+func NewWallexProducer(mode, kafkaTopic string, throttleInterval time.Duration) *WallexProducer {
 	logger := logrus.New()
 	logger.SetLevel(logrus.InfoLevel)
 	logger.SetFormatter(&logrus.TextFormatter{
@@ -73,8 +62,11 @@ func NewWallexProducer() *WallexProducer {
 	}
 
 	return &WallexProducer{
-		logger:      logger,
-		kafkaBroker: kafkaBroker,
+		mode:             mode,
+		kafkaTopic:       kafkaTopic,
+		logger:           logger,
+		kafkaBroker:      kafkaBroker,
+		throttleInterval: throttleInterval,
 	}
 }
 
@@ -128,7 +120,7 @@ func (wp *WallexProducer) chunkMarkets(markets []string, chunkSize int) [][]stri
 	var chunks [][]string
 	for i := 0; i < len(markets); i += chunkSize {
 		end := i + chunkSize
-		if min(end, len(markets)) != end {
+		if end > len(markets) {
 			end = len(markets)
 		}
 		chunks = append(chunks, markets[i:end])
@@ -148,212 +140,6 @@ func (wp *WallexProducer) deliveryReport() {
 			}
 		}
 	}()
-}
-
-// websocketWorker manages a single WebSocket connection for a chunk of symbols
-func (wp *WallexProducer) websocketWorker(ctx context.Context, symbolsChunk []string, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	workerID := fmt.Sprintf("Worker-%s", symbolsChunk[0])
-	wp.logger.Infof("[%s] Starting for %d symbols", workerID, len(symbolsChunk))
-
-	reconnectDelay := InitialReconnectDelay
-	consecutiveErrors := 0
-
-	for {
-		select {
-		case <-ctx.Done():
-			wp.logger.Infof("[%s] Shutting down due to context cancellation", workerID)
-			return
-		default:
-			if err := wp.handleWebSocketConnection(ctx, workerID, symbolsChunk); err != nil {
-				consecutiveErrors++
-				wp.logger.Errorf("[%s] WebSocket error (%d/%d): %v. Reconnecting in %v...",
-					workerID, consecutiveErrors, MaxConsecutiveErrors, err, reconnectDelay)
-
-				// Exponential backoff with max limit
-				if reconnectDelay < MaxReconnectDelay {
-					reconnectDelay *= 2
-					if reconnectDelay > MaxReconnectDelay {
-						reconnectDelay = MaxReconnectDelay
-					}
-				}
-
-				// If too many consecutive errors, wait longer
-				if consecutiveErrors >= MaxConsecutiveErrors {
-					wp.logger.Warnf("[%s] Too many consecutive errors, extending delay", workerID)
-					reconnectDelay = MaxReconnectDelay
-				}
-
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(reconnectDelay):
-					continue
-				}
-			} else {
-				// Reset on successful connection
-				consecutiveErrors = 0
-				reconnectDelay = InitialReconnectDelay
-			}
-		}
-	}
-}
-
-// handleWebSocketConnection handles a single WebSocket connection lifecycle
-func (wp *WallexProducer) handleWebSocketConnection(ctx context.Context, workerID string, symbolsChunk []string) error {
-	u, err := url.Parse(WallexWSURL)
-	if err != nil {
-		return fmt.Errorf("invalid WebSocket URL: %w", err)
-	}
-
-	dialer := websocket.Dialer{
-		HandshakeTimeout: HandshakeTimeout,
-	}
-
-	conn, _, err := dialer.Dial(u.String(), nil)
-	if err != nil {
-		return fmt.Errorf("failed to connect to WebSocket: %w", err)
-	}
-	defer conn.Close()
-
-	wp.logger.Infof("[%s] Connected to WebSocket", workerID)
-
-	// Create context for this connection
-	connCtx, connCancel := context.WithCancel(ctx)
-	defer connCancel()
-
-	// Channel for pong responses
-	pongReceived := make(chan bool, 1)
-	lastPongTime := time.Now()
-
-	// Set up pong handler
-	conn.SetPongHandler(func(string) error {
-		select {
-		case pongReceived <- true:
-		default:
-		}
-		lastPongTime = time.Now()
-		return nil
-	})
-
-	// Set up ping handler (for server-initiated pings)
-	conn.SetPingHandler(func(message string) error {
-		err := conn.WriteControl(websocket.PongMessage, []byte(message), time.Now().Add(WriteTimeout))
-		if err != nil {
-			wp.logger.Errorf("[%s] Failed to send pong: %v", workerID, err)
-		}
-		return err
-	})
-
-	// Subscribe to all symbols in this chunk
-	wp.logger.Infof("[%s] Subscribing to %d markets...", workerID, len(symbolsChunk))
-	for _, symbol := range symbolsChunk {
-		conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
-		subscriptionMsg := []interface{}{"subscribe", map[string]string{"channel": fmt.Sprintf("%s@trade", symbol)}}
-		if err := conn.WriteJSON(subscriptionMsg); err != nil {
-			return fmt.Errorf("failed to send subscription message: %w", err)
-		}
-	}
-	wp.logger.Infof("[%s] Subscriptions sent", workerID)
-
-	// Start ping routine
-	pingTicker := time.NewTicker(PingInterval)
-	defer pingTicker.Stop()
-
-	// Start health check routine
-	healthTicker := time.NewTicker(HealthCheckInterval)
-	defer healthTicker.Stop()
-
-	// Channel for read errors
-	readErrors := make(chan error, 1)
-	messages := make(chan []byte, 100)
-
-	// Start message reader goroutine
-	go func() {
-		defer close(messages)
-		defer close(readErrors)
-
-		for {
-			select {
-			case <-connCtx.Done():
-				return
-			default:
-				conn.SetReadDeadline(time.Now().Add(ReadTimeout))
-				_, message, err := conn.ReadMessage()
-				if err != nil {
-					select {
-					case readErrors <- err:
-					case <-connCtx.Done():
-					}
-					return
-				}
-
-				select {
-				case messages <- message:
-				case <-connCtx.Done():
-					return
-				}
-			}
-		}
-	}()
-
-	wp.logger.Infof("[%s] Starting message processing loop", workerID)
-
-	// Main event loop
-	for {
-		select {
-		case <-ctx.Done():
-			wp.logger.Infof("[%s] Context cancelled, closing connection", workerID)
-			return nil
-
-		case err := <-readErrors:
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNormalClosure) {
-				return fmt.Errorf("WebSocket read error: %w", err)
-			}
-			if err != nil {
-				return fmt.Errorf("connection error: %w", err)
-			}
-
-		case message := <-messages:
-			// Send message to Kafka
-			topic := KafkaTopic
-			err = wp.kafkaProducer.Produce(&kafka.Message{
-				TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
-				Value:          message,
-			}, nil)
-
-			if err != nil {
-				wp.logger.Errorf("[%s] Failed to produce message to Kafka: %v", workerID, err)
-			}
-
-		case <-pingTicker.C:
-			// Send ping to keep connection alive
-			conn.SetWriteDeadline(time.Now().Add(WriteTimeout))
-			if err := conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
-				return fmt.Errorf("failed to send ping: %w", err)
-			}
-
-			// Wait for pong with timeout
-			go func() {
-				select {
-				case <-pongReceived:
-					// Pong received, connection is healthy
-				case <-time.After(PongTimeout):
-					wp.logger.Warnf("[%s] Pong timeout, connection may be unhealthy", workerID)
-				case <-connCtx.Done():
-					return
-				}
-			}()
-
-		case <-healthTicker.C:
-			// Check connection health
-			timeSinceLastPong := time.Since(lastPongTime)
-			if timeSinceLastPong > (PingInterval + PongTimeout) {
-				return fmt.Errorf("connection appears unhealthy, last pong was %v ago", timeSinceLastPong)
-			}
-		}
-	}
 }
 
 // Run starts the main application
@@ -395,11 +181,30 @@ func (wp *WallexProducer) Run() error {
 		cancel()
 	}()
 
-	// Start workers
+	// Start workers based on mode
 	var wg sync.WaitGroup
-	for _, chunk := range marketChunks {
-		wg.Add(1)
-		go wp.websocketWorker(ctx, chunk, &wg)
+
+	switch wp.mode {
+	case "trades":
+		wp.logger.Info("Starting in TRADES mode (real-time)")
+		tradesWorker := trades.NewTradesWorker(wp.kafkaProducer, wp.logger, wp.kafkaTopic)
+		for _, chunk := range marketChunks {
+			wg.Add(1)
+			go tradesWorker.Run(ctx, chunk, &wg)
+		}
+
+	case "depth":
+		wp.logger.Infof("Starting in DEPTH mode (throttled: %v)", wp.throttleInterval)
+		// For depth, we can subscribe to both sellDepth and buyDepth
+		// For simplicity, let's use sellDepth (you can extend this to support both)
+		depthWorker := depth.NewDepthWorker(wp.kafkaProducer, wp.logger, wp.kafkaTopic, "sellDepth", wp.throttleInterval)
+		for _, chunk := range marketChunks {
+			wg.Add(1)
+			go depthWorker.Run(ctx, chunk, &wg)
+		}
+
+	default:
+		return fmt.Errorf("invalid mode: %s (must be 'trades' or 'depth')", wp.mode)
 	}
 
 	wp.logger.Info("All workers started, waiting for completion...")
@@ -410,7 +215,32 @@ func (wp *WallexProducer) Run() error {
 }
 
 func main() {
-	producer := NewWallexProducer()
+	var mode string
+	var throttleSeconds int
+
+	flag.StringVar(&mode, "mode", "trades", "Mode to run: 'trades' or 'depth'")
+	flag.IntVar(&throttleSeconds, "throttle", 7, "Throttle interval in seconds for depth mode (default: 7)")
+	flag.Parse()
+
+	// Validate mode
+	if mode != "trades" && mode != "depth" {
+		fmt.Fprintf(os.Stderr, "Error: mode must be 'trades' or 'depth', got: %s\n", mode)
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	// Determine Kafka topic based on mode
+	var kafkaTopic string
+	switch mode {
+	case "trades":
+		kafkaTopic = "radar_trades"
+	case "depth":
+		kafkaTopic = "radar_depths"
+	}
+
+	throttleInterval := time.Duration(throttleSeconds) * time.Second
+
+	producer := NewWallexProducer(mode, kafkaTopic, throttleInterval)
 
 	if err := producer.Run(); err != nil {
 		producer.logger.Fatalf("Application failed: %v", err)

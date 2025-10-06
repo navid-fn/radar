@@ -14,19 +14,19 @@ from dotenv import load_dotenv
 load_dotenv()
 
 KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
-KAFKA_TOPIC = "radar_trades"
-KAFKA_GROUP_ID = "clickhouse-consumers-v3"
+KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "radar_trades")
+KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "clickhouse-consumers-v3")
 
 CLICKHOUSE_HOST = os.getenv("CLICKHOUSE_HOST", "localhost")
 CLICKHOUSE_PORT = os.getenv("CLICKHOUSE_PORT", "9000")
-CLICKHOUSE_DB = "trades"
-CLICKHOUSE_TABLE = "trades_master"
+CLICKHOUSE_DB = os.getenv("CLICKHOUSE_DB", "trades")
+CLICKHOUSE_TABLE = os.getenv("CLICKHOUSE_TABLE", "trades_master")
 CLICKHOUSE_USER = os.getenv("CLICKHOUSE_USER", "default")
 CLICKHOUSE_PASSWORD = os.getenv("CLICKHOUSE_PASSWORD", "default")
 
-LOG_LEVEL = logging.INFO
-BATCH_SIZE = 200
-BATCH_TIMEOUT_SECONDS = 5
+LOG_LEVEL = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
+BATCH_SIZE = int(os.getenv("BATCH_SIZE", "200"))
+BATCH_TIMEOUT_SECONDS = int(os.getenv("BATCH_TIMEOUT_SECONDS", "5"))
 
 logging.basicConfig(level=LOG_LEVEL, format="%(asctime)s - %(levelname)s - %(message)s")
 
