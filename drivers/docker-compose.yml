@@ -1,7 +1,6 @@
 version: '3.8'
 
 services:
-  # BitPin Producer
   bitpin-producer:
     build:
       context: .
@@ -15,8 +14,6 @@ services:
       - DATA_DIR=/app/data
     volumes:
       - ./bitpin-data:/app/data
-
-  # Wallex Trades Producer (real-time trades)
   wallex-trades:
     build:
       context: .
@@ -29,30 +26,29 @@ services:
       - KAFKA_BROKER=localhost:9092
       - LOG_LEVEL=info
     command: ["./wallex-producer", "-mode", "trades"]
-    healthcheck:
-      test: ["CMD", "pgrep", "-f", "wallex-producer"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
-  # Wallex Depth Producer (throttled orderbook depth)
-  wallex-depth:
+  ramzinex-producer:
     build:
       context: .
-      dockerfile: Dockerfile.wallex
-    image: wallex-producer:latest
-    container_name: wallex-depth
+      dockerfile: Dockerfile.ramzinex
+    image: ramzinex-producer:latest
+    container_name: ramzinex-producer
     restart: unless-stopped
-    network_mode: "host"
     environment:
-      - KAFKA_BROKER=localhost:9092
-      - LOG_LEVEL=info
-    command: ["./wallex-producer", "-mode", "depth", "-throttle", "7"]
-    healthcheck:
-      test: ["CMD", "pgrep", "-f", "wallex-producer"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-      
+      - KAFKA_BROKER=${KAFKA_BROKER:-localhost:9092}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DATA_DIR=/app/data
+    volumes:
+      - ./bitpin-data:/app/data
+  tabdeal-producer:
+    build:
+      context: .
+      dockerfile: Dockerfile.tabdeal
+    image: tabdeal-producer:latest
+    container_name: tabdeal-producer
+    restart: unless-stopped
+    environment:
+      - KAFKA_BROKER=${KAFKA_BROKER:-localhost:9092}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DATA_DIR=/app/data
+    volumes:
+      - ./ramzinex-data:/app/data

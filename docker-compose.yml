@@ -87,36 +87,100 @@ services:
       retries: 3
       start_period: 10s
 
-  # Wallex Depth Producer (throttled orderbook depth)
-  wallex-depth:
+  nobitex-trade:
     build:
       context: ./drivers
-      dockerfile: Dockerfile.wallex
-    image: wallex-producer:latest
-    container_name: wallex-depth
+      dockerfile: Dockerfile.nobitex
+    image: nobitex-producer:latest
+    container_name: nobitex-trade
     restart: unless-stopped
     depends_on:
       - kafka
     environment:
       - KAFKA_BROKER=kafka:29092
       - LOG_LEVEL=info
-    command: ["./wallex-producer", "-mode", "depth", "-throttle", "7"]
+    command: ["./nobitex-producer"]
     networks:
       - dev-network
     healthcheck:
-      test: ["CMD", "pgrep", "-f", "wallex-producer"]
+      test: ["CMD", "pgrep", "-f", "nobitex-producer"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
 
-  # Trades Consumer Workers (multi-worker for better throughput)
-  trades-consumer-1:
+  bitpin-trade:
+    build:
+      context: ./drivers
+      dockerfile: Dockerfile.bitpin
+    image: bitpin-producer:latest
+    container_name: bitpin-trade
+    restart: unless-stopped
+    depends_on:
+      - kafka
+    environment:
+      - KAFKA_BROKER=kafka:29092
+      - LOG_LEVEL=info
+    command: ["./bitpin-producer"]
+    networks:
+      - dev-network
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "nobitex-producer"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  ramzinex-trade:
+    build:
+      context: ./drivers
+      dockerfile: Dockerfile.ramzinex
+    image: ramzinex-producer:latest
+    container_name: ramzinex-trade
+    restart: unless-stopped
+    depends_on:
+      - kafka
+    environment:
+      - KAFKA_BROKER=kafka:29092
+      - LOG_LEVEL=info
+    command: ["./ramzinex-producer"]
+    networks:
+      - dev-network
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "nobitex-producer"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  tabdeal-trade:
+    build:
+      context: ./drivers
+      dockerfile: Dockerfile.tabdeal
+    image: tabdeal-producer:latest
+    container_name: tabdeal-trade
+    restart: unless-stopped
+    depends_on:
+      - kafka
+    environment:
+      - KAFKA_BROKER=kafka:29092
+      - LOG_LEVEL=info
+    command: ["./tabdeal-producer"]
+    networks:
+      - dev-network
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "nobitex-producer"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  trades-consumer:
     build:
       context: .
       dockerfile: Dockerfile.consumer
     image: radar-consumer:latest
-    container_name: trades-consumer-1
+    container_name: trades-consumer
     restart: unless-stopped
     depends_on:
       - kafka
@@ -135,148 +199,11 @@ services:
       - LOG_LEVEL=INFO
       - BATCH_SIZE=500
       - BATCH_TIMEOUT_SECONDS=5
-    command: ["python", "kafka/consumer.py"]
+    command: ["python", "kafka/consumer.py",  "--num-workers", "2"]
     networks:
       - dev-network
     healthcheck:
       test: ["CMD", "pgrep", "-f", "consumer.py"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-
-  trades-consumer-2:
-    build:
-      context: .
-      dockerfile: Dockerfile.consumer
-    image: radar-consumer:latest
-    container_name: trades-consumer-2
-    restart: unless-stopped
-    depends_on:
-      - kafka
-      - clickhouse
-      - wallex-trades
-    environment:
-      - KAFKA_BROKER=kafka:29092
-      - KAFKA_TOPIC=radar_trades
-      - KAFKA_GROUP_ID=clickhouse-trades-consumers-v1
-      - CLICKHOUSE_HOST=clickhouse
-      - CLICKHOUSE_PORT=9000
-      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
-      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-default}
-      - CLICKHOUSE_DB=trades
-      - CLICKHOUSE_TABLE=trades_master
-      - LOG_LEVEL=INFO
-      - BATCH_SIZE=500
-      - BATCH_TIMEOUT_SECONDS=5
-    command: ["python", "kafka/consumer.py"]
-    networks:
-      - dev-network
-    healthcheck:
-      test: ["CMD", "pgrep", "-f", "consumer.py"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-
-  trades-consumer-3:
-    build:
-      context: .
-      dockerfile: Dockerfile.consumer
-    image: radar-consumer:latest
-    container_name: trades-consumer-3
-    restart: unless-stopped
-    depends_on:
-      - kafka
-      - clickhouse
-      - wallex-trades
-    environment:
-      - KAFKA_BROKER=kafka:29092
-      - KAFKA_TOPIC=radar_trades
-      - KAFKA_GROUP_ID=clickhouse-trades-consumers-v1
-      - CLICKHOUSE_HOST=clickhouse
-      - CLICKHOUSE_PORT=9000
-      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
-      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-default}
-      - CLICKHOUSE_DB=trades
-      - CLICKHOUSE_TABLE=trades_master
-      - LOG_LEVEL=INFO
-      - BATCH_SIZE=500
-      - BATCH_TIMEOUT_SECONDS=5
-    command: ["python", "kafka/consumer.py"]
-    networks:
-      - dev-network
-    healthcheck:
-      test: ["CMD", "pgrep", "-f", "consumer.py"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-
-  # Depth Consumer Workers (multi-worker for better throughput)
-  depth-consumer-1:
-    build:
-      context: .
-      dockerfile: Dockerfile.consumer
-    image: radar-consumer:latest
-    container_name: depth-consumer-1
-    restart: unless-stopped
-    depends_on:
-      - kafka
-      - clickhouse
-      - wallex-depth
-    environment:
-      - KAFKA_BROKER=kafka:29092
-      - KAFKA_TOPIC=radar_depths
-      - KAFKA_GROUP_ID=clickhouse-depth-consumers-v1
-      - CLICKHOUSE_HOST=clickhouse
-      - CLICKHOUSE_PORT=9000
-      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
-      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-default}
-      - CLICKHOUSE_DB=trades
-      - CLICKHOUSE_TABLE=orderbook_depth
-      - LOG_LEVEL=INFO
-      - BATCH_SIZE=500
-      - BATCH_TIMEOUT_SECONDS=5
-    command: ["python", "kafka/consumer_depth.py"]
-    networks:
-      - dev-network
-    healthcheck:
-      test: ["CMD", "pgrep", "-f", "consumer_depth.py"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-
-  depth-consumer-2:
-    build:
-      context: .
-      dockerfile: Dockerfile.consumer
-    image: radar-consumer:latest
-    container_name: depth-consumer-2
-    restart: unless-stopped
-    depends_on:
-      - kafka
-      - clickhouse
-      - wallex-depth
-    environment:
-      - KAFKA_BROKER=kafka:29092
-      - KAFKA_TOPIC=radar_depths
-      - KAFKA_GROUP_ID=clickhouse-depth-consumers-v1
-      - CLICKHOUSE_HOST=clickhouse
-      - CLICKHOUSE_PORT=9000
-      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
-      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-default}
-      - CLICKHOUSE_DB=trades
-      - CLICKHOUSE_TABLE=orderbook_depth
-      - LOG_LEVEL=INFO
-      - BATCH_SIZE=500
-      - BATCH_TIMEOUT_SECONDS=5
-    command: ["python", "kafka/consumer_depth.py"]
-    networks:
-      - dev-network
-    healthcheck:
-      test: ["CMD", "pgrep", "-f", "consumer_depth.py"]
       interval: 30s
       timeout: 10s
       retries: 3

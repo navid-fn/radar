@@ -51,3 +51,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
 # Default command (will be overridden by docker-compose)
 CMD ["python", "-m", "kafka.consumer"]
 
+

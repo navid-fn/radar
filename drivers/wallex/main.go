@@ -23,7 +23,7 @@ import (
 const (
 	WallexAPIURL         = "https://api.wallex.ir/hector/web/v1/markets"
 	DefaultKafkaBroker   = "localhost:9092"
-	MaxSubsPerConnection = 40
+	MaxSubsPerConnection = 20
 )
 
 // Market represents a trading market from the API
@@ -195,12 +195,17 @@ func (wp *WallexProducer) Run() error {
 
 	case "depth":
 		wp.logger.Infof("Starting in DEPTH mode (throttled: %v)", wp.throttleInterval)
-		// For depth, we can subscribe to both sellDepth and buyDepth
-		// For simplicity, let's use sellDepth (you can extend this to support both)
 		depthWorker := depth.NewDepthWorker(wp.kafkaProducer, wp.logger, wp.kafkaTopic, "sellDepth", wp.throttleInterval)
 		for _, chunk := range marketChunks {
 			wg.Add(1)
 			go depthWorker.Run(ctx, chunk, &wg)
+		}
+
+		wp.logger.Infof("Starting in DEPTH mode (throttled: %v)", wp.throttleInterval)
+		depthBuyWorker := depth.NewDepthWorker(wp.kafkaProducer, wp.logger, wp.kafkaTopic, "buyDepth", wp.throttleInterval)
+		for _, chunk := range marketChunks {
+			wg.Add(1)
+			go depthBuyWorker.Run(ctx, chunk, &wg)
 		}
 
 	default:

@@ -166,9 +166,8 @@ dev-setup:
 # Full pipeline start
 start-pipeline: start-infra
 	@echo "Starting full pipeline..."
-	@sleep 30
 	@make start-producers
-	@sleep 5
+	@sleep 10
 	@make start-consumers
 	@echo "Pipeline started. Use 'make monitor' to track."
 

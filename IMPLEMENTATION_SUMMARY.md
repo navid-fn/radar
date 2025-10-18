@@ -331,3 +331,4 @@ You now have a **production-ready, multi-worker Kafka pipeline** that:
 
 **Start it now**: `make start-pipeline` 🚀
 
+
