@@ -1,25 +1,9 @@
 import requests
-import websocket
 import json
 import pytz
 from datetime import datetime
 from time import sleep
 
-def on_message(ws, message):
-    print("Trade event:", message)
-
-def on_open(ws):
-    ws.send(json.dumps({"method":"sub_to_market_data", "symbols":["USDT_IRT"]}))
-
-def scrape():
-    url = 'wss://ws.bitpin.ir'
-    ws = websocket.WebSocketApp(
-        url,
-        on_open=on_open,
-        on_message=on_message
-    )
-
-    ws.run_forever()          
 
 def to_tehran_time(utc_timestamp):
     """Convert UTC ISO 8601 timestamp to Tehran (IRST) time."""
@@ -61,7 +45,7 @@ def fetch_binance_usdt_pairs():
         
         print(f"Fetched page {page}: {len(tickers)} tickers, {len([t for t in tickers if t.get('target') == 'USDT'])} USDT pairs")
         page += 1
-        sleep(30)
+        sleep(2)
         
     
     return pairs_data
