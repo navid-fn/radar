@@ -153,3 +153,5 @@ func TestDefaultHTTPConfig(t *testing.T) {
 		t.Errorf("Expected PollingDelay 1s, got %v", config.PollingDelay)
 	}
 }
+
+

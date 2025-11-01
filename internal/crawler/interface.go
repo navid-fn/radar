@@ -43,3 +43,5 @@ type BaseCrawler struct {
 type Worker interface {
 	Run(ctx context.Context, chunk []string, wg *sync.WaitGroup)
 }
+
+

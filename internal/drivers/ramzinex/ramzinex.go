@@ -55,7 +55,6 @@ type RamzinexCrawler struct {
 	pairIDToName map[int]string
 }
 
-// NewRamzinexCrawler creates a new Ramzinex crawler instance
 func NewRamzinexCrawler() *RamzinexCrawler {
 	config := crawler.NewConfig("ramzinex", MaxSubsPerConnection)
 	baseCrawler := crawler.NewBaseCrawler(config)
@@ -66,11 +65,9 @@ func NewRamzinexCrawler() *RamzinexCrawler {
 		pairIDToName: make(map[int]string),
 	}
 
-	// Setup WebSocket worker with Ramzinex-specific configuration
 	wsConfig := crawler.DefaultWebSocketConfig(RamzinexWSUrl)
 	rc.wsWorker = crawler.NewBaseWebSocketWorker(wsConfig, rc.Logger, rc.SendToKafka)
 
-	// Set Ramzinex-specific OnConnect handler (Centrifuge protocol)
 	rc.wsWorker.OnConnect = func(conn *websocket.Conn) error {
 		connectMsg := map[string]any{
 			"connect": map[string]string{
@@ -87,32 +84,24 @@ func NewRamzinexCrawler() *RamzinexCrawler {
 		return nil
 	}
 
-	// Set Ramzinex-specific OnMessage handler to filter duplicates and format messages
 	rc.wsWorker.OnMessage = func(message []byte) ([]byte, error) {
 		messageStr := string(message)
 
-		// Check if it's a ping message (empty JSON {})
 		if messageStr == "{}" || messageStr == "{}\n" || len(strings.TrimSpace(messageStr)) == 2 {
-			// Respond with pong (handled in OnMessage to customize response)
 			return nil, nil
 		}
 
-		// Parse message
 		var msgCheck map[string]any
 		if err := json.Unmarshal(message, &msgCheck); err == nil {
-			// Check if it's an error message
 			if errMsg, hasError := msgCheck["error"]; hasError {
 				rc.Logger.Warnf("Received error from server: %v", errMsg)
 				return nil, nil
 			}
 
-			// Check if it's a push message with trade data
 			if pushData, hasPush := msgCheck["push"].(map[string]any); hasPush {
 				if pub, hasPub := pushData["pub"].(map[string]any); hasPub {
 					if data, hasData := pub["data"]; hasData {
-						// Extract channel and replace ID with Name
 						if channelStr, ok := pushData["channel"].(string); ok {
-							// Parse channel to get pair ID (e.g., "last-trades:10")
 							parts := strings.Split(channelStr, ":")
 							if len(parts) == 2 {
 								var pairID int
@@ -120,11 +109,9 @@ func NewRamzinexCrawler() *RamzinexCrawler {
 									if pairName, found := rc.pairIDToName[pairID]; found {
 										channelName := fmt.Sprintf("last-trades:%s", pairName)
 
-										// Filter duplicate trades
 										filteredTrades := rc.filterDuplicateTrades(channelName, data)
 
 										if len(filteredTrades) > 0 {
-											// Create new message with pair name and filtered data
 											kafkaMsg := map[string]any{
 												"channel": channelName,
 												"data":    filteredTrades,
@@ -141,19 +128,16 @@ func NewRamzinexCrawler() *RamzinexCrawler {
 				}
 			}
 		}
-
 		return nil, nil
 	}
 
 	return rc
 }
 
-// GetName returns the exchange name
 func (rc *RamzinexCrawler) GetName() string {
 	return "ramzinex"
 }
 
-// FetchMarkets fetches all tradeable pairs from Ramzinex API
 func (rc *RamzinexCrawler) FetchMarkets() ([]PairDetail, error) {
 	resp, err := http.Get(RamzinexAPIUrl)
 	if err != nil {
@@ -186,7 +170,6 @@ func (rc *RamzinexCrawler) FetchMarkets() ([]PairDetail, error) {
 			Name: pd.Name.En,
 		}
 		pairs = append(pairs, pairDetail)
-		// Store ID to Name mapping
 		rc.pairIDToName[pd.ID] = pd.Name.En
 	}
 
@@ -194,7 +177,6 @@ func (rc *RamzinexCrawler) FetchMarkets() ([]PairDetail, error) {
 	return pairs, nil
 }
 
-// filterDuplicateTrades filters duplicate trades based on hash
 func (rc *RamzinexCrawler) filterDuplicateTrades(channel string, data any) []interface{} {
 	var filteredTrades []any
 
@@ -212,20 +194,17 @@ func (rc *RamzinexCrawler) filterDuplicateTrades(channel string, data any) []int
 			continue
 		}
 
-		// Extract hash from index 5
 		tradeHash, ok := tradeArray[5].(string)
 		if !ok || tradeHash == "" {
 			filteredTrades = append(filteredTrades, trade)
 			continue
 		}
 
-		// Check if already processed
 		if rc.tradeTracker.IsTradeProcessed(channel, tradeHash) {
 			duplicatesCount++
 			continue
 		}
 
-		// Mark as processed and include in filtered trades
 		rc.tradeTracker.MarkTradeProcessed(channel, tradeHash)
 		filteredTrades = append(filteredTrades, trade)
 	}
@@ -238,7 +217,6 @@ func (rc *RamzinexCrawler) filterDuplicateTrades(channel string, data any) []int
 	return filteredTrades
 }
 
-// chunkPairs splits pairs into smaller chunks
 func chunkPairs(pairs []PairDetail, chunkSize int) [][]PairDetail {
 	var chunks [][]PairDetail
 	for i := 0; i < len(pairs); i += chunkSize {
@@ -251,11 +229,9 @@ func chunkPairs(pairs []PairDetail, chunkSize int) [][]PairDetail {
 	return chunks
 }
 
-// Run starts the Ramzinex crawler
 func (rc *RamzinexCrawler) Run(ctx context.Context) error {
 	rc.Logger.Info("Starting Ramzinex Crawler...")
 
-	// Initialize Kafka producer
 	if err := rc.InitKafkaProducer(); err != nil {
 		return fmt.Errorf("failed to initialize Kafka producer: %w", err)
 	}
@@ -263,7 +239,6 @@ func (rc *RamzinexCrawler) Run(ctx context.Context) error {
 
 	rc.StartDeliveryReport()
 
-	// Fetch pairs
 	pairs, err := rc.FetchMarkets()
 	if err != nil {
 		return fmt.Errorf("could not fetch pairs: %w", err)
@@ -277,11 +252,8 @@ func (rc *RamzinexCrawler) Run(ctx context.Context) error {
 	rc.Logger.Infof("Divided %d pairs into %d chunks of ~%d",
 		len(pairs), len(pairChunks), rc.Config.MaxSubsPerConnection)
 
-	// Convert PairDetail chunks to string chunks for WebSocket worker
-	// and setup custom subscribe handler
 	return crawler.RunWithGracefulShutdown(rc.Logger, func(ctx context.Context, wg *sync.WaitGroup) {
 		for i, chunk := range pairChunks {
-			// Setup custom OnSubscribe for this chunk
 			subscriptionID := 2
 			rc.wsWorker.OnSubscribe = func(conn *websocket.Conn, _ []string) error {
 				for _, pair := range chunk {
@@ -306,7 +278,6 @@ func (rc *RamzinexCrawler) Run(ctx context.Context) error {
 				return nil
 			}
 
-			// Convert to string slice for worker
 			symbolsChunk := make([]string, len(chunk))
 			for j, pair := range chunk {
 				symbolsChunk[j] = pair.Name
@@ -315,10 +286,11 @@ func (rc *RamzinexCrawler) Run(ctx context.Context) error {
 			wg.Add(1)
 			go rc.wsWorker.RunWorker(ctx, symbolsChunk, wg, "RamzinexWorker")
 
-			// Stagger worker startup
 			if i < len(pairChunks)-1 {
 				time.Sleep(1 * time.Second)
 			}
 		}
 	})
 }
+
+

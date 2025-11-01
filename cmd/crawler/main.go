@@ -18,7 +18,7 @@ import (
 func main() {
 	var exchange string
 
-	flag.StringVar(&exchange, "exchange", "", "Exchange to crawl: bitpin, nobitex, ramzinex, tabdeal, wallex (required)")
+	flag.StringVar(&exchange, "exchange", "", "Exchange to crawl: bitpin, nobitex, ramzinex, tabdeal, wallex, coingecko (required)")
 	flag.Parse()
 
 	if exchange == "" {
@@ -30,16 +30,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  - ramzinex\n")
 		fmt.Fprintf(os.Stderr, "  - tabdeal\n")
 		fmt.Fprintf(os.Stderr, "  - wallex\n")
+		fmt.Fprintf(os.Stderr, "  - coingecko\n")
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
 		fmt.Fprintf(os.Stderr, "  %s -exchange bitpin\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s -exchange nobitex\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  %s -exchange wallex\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -exchange coingecko\n", os.Args[0])
 		os.Exit(1)
-	}
-
-	if exchange == "coingecko" {
-		coingecko.FetechUSDTVolumeChange()
-		return
 	}
 
 	logger := crawler.NewLogger()
@@ -58,6 +54,8 @@ func main() {
 		c = tabdeal.NewTabdealCrawler()
 	case "wallex":
 		c = wallex.NewWallexCrawler()
+	case "coingecko":
+		c = coingecko.NewCoinGeckoCrawler()
 	default:
 		logger.Fatalf("Unknown exchange: %s", exchange)
 	}

@@ -51,10 +51,12 @@ def get_clickhouse_client():
         )
         raise
 
+
 def restart_database():
     client = get_clickhouse_client()
     client.execute(f"DROP DATABASE IF EXISTS {CLICKHOUSE_DB}")
     client.execute(f"DROP TABLE IF EXISTS {CLICKHOUSE_TABLE}")
+
 
 def setup_database(client):
     """
@@ -125,6 +127,38 @@ def _transform_wallex_trade(data):
         return []
 
 
+def _transform_coingecko_data(data):
+    """Transforms a trade message from the Coingecko format."""
+    try:
+        symbol = data.get("symbol", "") + "/USDT"
+        exchange = data.get("exchange")
+        side = data.get("side", "all")
+        price_str = data.get("price", "0.0")
+        volume = data.get("volume", "0.0")
+        quantity = data.get("quantity")
+        timestamp_str = data.get("time")
+
+        unique_string = f"wallex-{symbol}-{timestamp_str}-{price_str}-{quantity}-{side}"
+        trade_id = hashlib.sha1(unique_string.encode("utf-8")).hexdigest()
+
+        event_time = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+
+        row = (
+            trade_id,
+            exchange,
+            symbol,
+            side,
+            float(price_str),
+            float(volume),
+            quantity,
+            event_time,
+        )
+        return [row]  # Return as a list for consistency
+    except Exception as e:
+        logging.error(f"Failed to transform Wallex trade. Error: {e}. Data: {data}")
+        return []
+
+
 def _transform_bitpin_matches(data):
     """Transforms a trade message from the Bitpin 'matches_update' format."""
     try:
@@ -151,6 +185,7 @@ def _transform_bitpin_matches(data):
         logging.error(f"Failed to transform Bitpin matches. Error: {e}. Data: {data}")
         return []
 
+
 def _transform_tabdeal_matches(data):
     """Transforms a trade message from the Bitpin 'matches_update' format.
     {'id': 159176050, 'price': '8161.0000000000000000', 'qty': '7.35120000',
@@ -162,11 +197,9 @@ def _transform_tabdeal_matches(data):
         symbol = data.get("symbol")
         side = "buy" if data.get("isBuyerMaker", False) else "sell"
         price_str = data.get("price", "0.0")
-        quantity_str = data.get(
-            "qty", "0.0"
-        )
+        quantity_str = data.get("qty", "0.0")
         time = data.get("time")
-        trade_id = str(data.get('id'))
+        trade_id = str(data.get("id"))
 
         event_time = datetime.fromisoformat(time)
 
@@ -185,27 +218,33 @@ def _transform_tabdeal_matches(data):
         logging.error(f"Failed to transform Wallex trade. Error: {e}. Data: {data}")
         return []
 
+
 def _transform_ramzinex_matches(data):
     """
     {
-    'channel': 'last-trades:bitcoin/rial', 
-    'data': [[132622066875, 1.6e-05, '2025-10-01 12:09:05', 'sell', 1759320545, 'dfaef1dead062f3053a1ce68753ccc4c']]
+    'channel': 'last-trades:bitcoin/rial',
+    'data': [[132622066875,
+              1.6e-05,
+              '2025-10-01 12:09:05',
+              'sell',
+              1759320545,
+              'dfaef1dead062f3053a1ce68753ccc4c']]
     }
 
     """
     try:
-        symbol = data.get('channel').split('last-trades:')[1]
+        symbol = data.get("channel").split("last-trades:")[1]
         transformed_rows = []
-        for trade in data.get('data'):
+        for trade in data.get("data"):
             row = (
                 trade[5],
-                'ramzinex',
+                "ramzinex",
                 symbol,
                 trade[3],
                 float(trade[0]),
                 Decimal(trade[1]),
                 Decimal(trade[0]) * Decimal(trade[1]),
-                datetime.fromisoformat(trade[2])
+                datetime.fromisoformat(trade[2]),
             )
             transformed_rows.append(row)
         return transformed_rows
@@ -214,29 +253,29 @@ def _transform_ramzinex_matches(data):
         logging.error(f"Failed to transform Wallex trade. Error: {e}. Data: {data}")
         return []
 
+
 def _transform_nobitex_matches(data):
-        symbol = data.get('symbol')
-        side = data.get('type')
-        price_str = data.get('price')
-        quantity_str = data.get('volume')
-        time = data.get("time")
+    symbol = data.get("symbol")
+    side = data.get("type")
+    price_str = data.get("price")
+    quantity_str = data.get("volume")
+    time = data.get("time")
 
-        unique_string = (
-            f"nobitex-{symbol}-{time}-{price_str}-{quantity_str}-{side}"
-        )
-        trade_id = hashlib.sha1(unique_string.encode("utf-8")).hexdigest()
+    unique_string = f"nobitex-{symbol}-{time}-{price_str}-{quantity_str}-{side}"
+    trade_id = hashlib.sha1(unique_string.encode("utf-8")).hexdigest()
 
-        row = (
-            trade_id,
-            "nobitex",
-            symbol,
-            side,
-            float(price_str),
-            float(quantity_str),
-            Decimal(price_str) * Decimal(quantity_str),
-            datetime.fromisoformat(time)
-        )
-        return [row]  # Return as a list for consistency
+    row = (
+        trade_id,
+        "nobitex",
+        symbol,
+        side,
+        float(price_str),
+        float(quantity_str),
+        Decimal(price_str) * Decimal(quantity_str),
+        datetime.fromisoformat(time),
+    )
+    return [row]  # Return as a list for consistency
+
 
 def parse_and_transform(message_value):
     """
@@ -244,16 +283,18 @@ def parse_and_transform(message_value):
     """
     try:
         data = json.loads(message_value)
+        if isinstance(data, dict) and data.get("exchange") == "binance":
+            return _transform_coingecko_data(data)
         # Heuristic to determine the source based on message structure
         if isinstance(data, list) and len(data) == 2:
             return _transform_wallex_trade(data)
         elif isinstance(data, dict) and data.get("event") == "matches_update":
             return _transform_bitpin_matches(data)
-        elif isinstance(data, dict) and data.get('exchange') == 'tabdeal':
+        elif isinstance(data, dict) and data.get("exchange") == "tabdeal":
             return _transform_tabdeal_matches(data)
-        elif isinstance(data, dict) and data.get('exchange') == 'nobitex':
+        elif isinstance(data, dict) and data.get("exchange") == "nobitex":
             return _transform_nobitex_matches(data)
-        elif isinstance(data, dict) and data.get('channel'):
+        elif isinstance(data, dict) and data.get("channel"):
             return _transform_ramzinex_matches(data)
         else:
             return []
@@ -264,11 +305,13 @@ def parse_and_transform(message_value):
 
 def consumer_worker(worker_id, stop_event):
     client = get_clickhouse_client()
-    consumer = Consumer({
-        "bootstrap.servers": KAFKA_BROKER,
-        "group.id": KAFKA_GROUP_ID,
-        "auto.offset.reset": "earliest",
-    })
+    consumer = Consumer(
+        {
+            "bootstrap.servers": KAFKA_BROKER,
+            "group.id": KAFKA_GROUP_ID,
+            "auto.offset.reset": "earliest",
+        }
+    )
     consumer.subscribe([KAFKA_TOPIC])
     logging.info(f"Worker {worker_id} subscribed to Kafka topic '{KAFKA_TOPIC}'.")
     batch = []
@@ -278,9 +321,15 @@ def consumer_worker(worker_id, stop_event):
         while not stop_event.is_set():
             msg = consumer.poll(timeout=1.0)
             if msg is None:
-                if batch and (datetime.now() - last_insert_time).total_seconds() > BATCH_TIMEOUT_SECONDS:
+                if (
+                    batch
+                    and (datetime.now() - last_insert_time).total_seconds()
+                    > BATCH_TIMEOUT_SECONDS
+                ):
                     client.execute(insert_query, batch)
-                    logging.info(f"Worker {worker_id}: Inserted a partial batch of {len(batch)} records due to timeout.")
+                    logging.info(
+                        f"Worker {worker_id}: Inserted a partial batch of {len(batch)} records due to timeout."
+                    )
                     batch.clear()
                     last_insert_time = datetime.now()
                 continue
@@ -292,22 +341,29 @@ def consumer_worker(worker_id, stop_event):
                     batch.extend(transformed_trades)
             if len(batch) >= BATCH_SIZE:
                 client.execute(insert_query, batch)
-                logging.info(f"Worker {worker_id}: Inserted a full batch of {len(batch)} records.")
+                logging.info(
+                    f"Worker {worker_id}: Inserted a full batch of {len(batch)} records."
+                )
                 batch.clear()
                 last_insert_time = datetime.now()
     except KafkaException as e:
         logging.error(f"Worker {worker_id}: Kafka error: {e}")
     except Exception as e:
-        logging.error(f"Worker {worker_id}: An unexpected error occurred: {e}", exc_info=True)
+        logging.error(
+            f"Worker {worker_id}: An unexpected error occurred: {e}", exc_info=True
+        )
     finally:
         if batch:
             try:
                 client.execute(insert_query, batch)
-                logging.info(f"Worker {worker_id}: Inserted final batch of {len(batch)} records before shutdown.")
+                logging.info(
+                    f"Worker {worker_id}: Inserted final batch of {len(batch)} records before shutdown."
+                )
             except Exception as e:
                 logging.error(f"Worker {worker_id}: Failed to insert final batch: {e}")
         consumer.close()
         logging.info(f"Worker {worker_id}: Kafka consumer closed.")
+
 
 def main(num_workers=1):
     client = get_clickhouse_client()
@@ -334,10 +390,18 @@ def main(num_workers=1):
         t.join()
     logging.info("All workers stopped.")
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-r", "--drop_database", help="Recreate Database", action=argparse.BooleanOptionalAction)
-    parser.add_argument("--num-workers", type=int, default=1, help="Number of consumer workers to run")
+    parser.add_argument(
+        "-r",
+        "--drop_database",
+        help="Recreate Database",
+        action=argparse.BooleanOptionalAction,
+    )
+    parser.add_argument(
+        "--num-workers", type=int, default=1, help="Number of consumer workers to run"
+    )
     args = parser.parse_args()
     if args.drop_database:
         restart_database()

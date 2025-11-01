@@ -6,3 +6,5 @@ import "fmt"
 func main() {
 	fmt.Println("Consumer not yet implemented in new structure")
 }
+
+

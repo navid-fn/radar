@@ -198,3 +198,5 @@ func (it *IDTracker) DecreaseSleep(symbol string, decrement, minSleep, defaultSl
 
 	it.sleepDuration[symbol] = newSleep
 }
+
+

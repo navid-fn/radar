@@ -30,7 +30,6 @@ type BitpinCrawler struct {
 	wsWorker *crawler.BaseWebSocketWorker
 }
 
-// NewBitpinCrawler creates a new Bitpin crawler instance
 func NewBitpinCrawler() *BitpinCrawler {
 	config := crawler.NewConfig("bitpin", MaxSubsPerConnection)
 	baseCrawler := crawler.NewBaseCrawler(config)
@@ -39,21 +38,18 @@ func NewBitpinCrawler() *BitpinCrawler {
 		BaseCrawler: baseCrawler,
 	}
 
-	// Setup WebSocket worker with Bitpin-specific configuration
 	wsConfig := crawler.DefaultWebSocketConfig(BitpinWSURL)
 	bc.wsWorker = crawler.NewBaseWebSocketWorker(wsConfig, bc.Logger, bc.SendToKafka)
 
-	// Set Bitpin-specific OnMessage handler to filter PONG messages
 	bc.wsWorker.OnMessage = func(message []byte) ([]byte, error) {
 		messageStr := string(message)
 		if messageStr == `{"message":"PONG"}` {
 			bc.Logger.Debug("PONG received")
-			return nil, nil // Skip PONG messages
+			return nil, nil
 		}
 		return message, nil
 	}
 
-	// Set Bitpin-specific OnSubscribe handler
 	bc.wsWorker.OnSubscribe = func(conn *websocket.Conn, symbols []string) error {
 		subscriptionMsg := map[string]any{
 			"method":  "sub_to_market_data",
@@ -72,12 +68,10 @@ func NewBitpinCrawler() *BitpinCrawler {
 	return bc
 }
 
-// GetName returns the exchange name
 func (bc *BitpinCrawler) GetName() string {
 	return "bitpin"
 }
 
-// FetchMarkets fetches all tradeable markets from Bitpin API
 func (bc *BitpinCrawler) FetchMarkets() ([]string, error) {
 	var markets []string
 
@@ -113,11 +107,9 @@ func (bc *BitpinCrawler) FetchMarkets() ([]string, error) {
 	return markets, nil
 }
 
-// Run starts the Bitpin crawler
 func (bc *BitpinCrawler) Run(ctx context.Context) error {
 	bc.Logger.Info("Starting Bitpin Crawler...")
 
-	// Initialize Kafka producer
 	if err := bc.InitKafkaProducer(); err != nil {
 		return fmt.Errorf("failed to initialize Kafka producer: %w", err)
 	}
@@ -125,7 +117,6 @@ func (bc *BitpinCrawler) Run(ctx context.Context) error {
 
 	bc.StartDeliveryReport()
 
-	// Fetch markets
 	markets, err := bc.FetchMarkets()
 	if err != nil {
 		return fmt.Errorf("could not fetch markets: %w", err)
@@ -135,21 +126,20 @@ func (bc *BitpinCrawler) Run(ctx context.Context) error {
 		return fmt.Errorf("no markets found to subscribe to")
 	}
 
-	// Chunk markets
 	marketChunks := crawler.ChunkMarkets(markets, bc.Config.MaxSubsPerConnection)
 	bc.Logger.Infof("Divided %d markets into %d chunks of ~%d",
 		len(markets), len(marketChunks), bc.Config.MaxSubsPerConnection)
 
-	// Start workers with graceful shutdown
 	return crawler.RunWithGracefulShutdown(bc.Logger, func(ctx context.Context, wg *sync.WaitGroup) {
 		for i, chunk := range marketChunks {
 			wg.Add(1)
 			go bc.wsWorker.RunWorker(ctx, chunk, wg, "BitpinWorker")
 
-			// Stagger worker startup
 			if i < len(marketChunks)-1 {
 				time.Sleep(1 * time.Second)
 			}
 		}
 	})
 }
+
+
