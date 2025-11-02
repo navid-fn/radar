@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/navid-fn/radar/internal/crawler"
+	"github.com/navid-fn/radar/utils"
 	"golang.org/x/time/rate"
 )
 
@@ -204,7 +206,22 @@ func (nc *NobitexCrawler) fetchTrades(ctx context.Context, symbol string) error 
 			continue
 		}
 
-		jsonData, err := t.MarshalJSON()
+		volume, _ := strconv.ParseFloat(t.Volume, 64)
+		price, _ := strconv.ParseFloat(t.Price, 64)
+	
+		tradeTime := utils.TurnTimeStampToTime(t.Time, false)
+
+		data := crawler.KafkaData{
+			Exchange: t.Exchange,
+			Symbol:   t.Symbol,
+			Volume:   volume,
+			Time:     tradeTime.Format(time.RFC3339),
+			Price:    price,
+			Quantity: volume * price,
+			Side:     t.Side,
+		}
+
+		jsonData, err := json.Marshal(data)
 		if err != nil {
 			nc.Logger.Errorf("Error marshaling trade for %s: %v", symbol, err)
 			continue

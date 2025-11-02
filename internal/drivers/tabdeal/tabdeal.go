@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/navid-fn/radar/internal/crawler"
+	"github.com/navid-fn/radar/utils"
 )
 
 const (
@@ -35,19 +37,6 @@ type TradesInfo struct {
 	QuoteQty string `json:"quoteqty"`
 	Time     int64  `json:"time"`
 	Buyer    bool   `json:"isBuyerMaker"`
-	Symbol   string `json:"symbol"`
-	Exchange string `json:"exchange"`
-}
-
-func (t TradesInfo) MarshalJSON() ([]byte, error) {
-	type AliasTradesInfo TradesInfo
-	return json.Marshal(&struct {
-		AliasTradesInfo
-		Time time.Time `json:"time"`
-	}{
-		AliasTradesInfo: AliasTradesInfo(t),
-		Time:            time.UnixMilli(t.Time),
-	})
 }
 
 type TabdealCrawler struct {
@@ -128,9 +117,28 @@ func (tc *TabdealCrawler) fetchTrades(ctx context.Context, symbol string) error 
 			continue
 		}
 
-		t.Symbol = symbol
-		t.Exchange = "tabdeal"
-		jsonData, err := t.MarshalJSON()
+		volume, _ := strconv.ParseFloat(t.Qty, 64)
+		price, _ := strconv.ParseFloat(t.Price, 64)
+		quantity, _ := strconv.ParseFloat(t.QuoteQty, 64)
+		trade_id := strconv.FormatInt(int64(t.ID), 10)
+		side := "sell"
+		if t.Buyer {
+			side = "buy"
+		}
+	
+		tradeTime := utils.TurnTimeStampToTime(t.Time, false)
+
+		data := crawler.KafkaData{
+			Exchange: "tabdeal",
+			ID: trade_id,
+			Side: side,
+			Volume: volume,
+			Price: price,
+			Quantity: quantity,
+			Time: tradeTime.Format(time.RFC3339),
+		}
+
+		jsonData, err := json.Marshal(data)
 		if err != nil {
 			tc.Logger.Errorf("Error marshaling trade: %v", err)
 			continue
@@ -145,17 +153,11 @@ func (tc *TabdealCrawler) fetchTrades(ctx context.Context, symbol string) error 
 		newTradesCount++
 	}
 
-	currentSleep := tc.idTracker.GetSleepDuration(symbol, MinSleepTime)
 
 	if newTradesCount > 0 {
 		tc.idTracker.DecreaseSleep(symbol, SleepDecrement, MinSleepTime, MinSleepTime)
 	} else {
 		tc.idTracker.IncreaseSleep(symbol, SleepIncrement, MaxSleepTime, MinSleepTime)
-		newSleep := tc.idTracker.GetSleepDuration(symbol, MinSleepTime)
-		if currentSleep != newSleep {
-			tc.Logger.Infof("Symbol: %s - Sleep extended: %v -> %v (no new trades)",
-				symbol, currentSleep, newSleep)
-		}
 	}
 
 	time.Sleep(tc.idTracker.GetSleepDuration(symbol, MinSleepTime))

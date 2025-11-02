@@ -39,15 +39,6 @@ type ConvertedData struct {
 	USD float64 `json:"usd"`
 }
 
-type TickerData struct {
-	Exchange string  `json:"exchange"`
-	Symbol   string  `json:"symbol"`
-	Price    float64 `json:"price"`
-	Volume   float64 `json:"volume"`
-	Quantity float64 `json:"quantity"`
-	Side     string  `json:"side"`
-	Time     string  `json:"time"`
-}
 
 type CoinGeckoCrawler struct {
 	*crawler.BaseCrawler
@@ -138,7 +129,7 @@ func (cgc *CoinGeckoCrawler) sendUSDPairs(tickers []Ticker) int {
 		if !strings.EqualFold(ticker.Target, "USDT") {
 			continue
 		}
-		data := TickerData{
+		data := crawler.KafkaData{
 			Symbol:   fmt.Sprintf("%s/%s", ticker.Base, "USDT"),
 			Price:    ticker.ConvertedLast.USD,
 			Volume:   ticker.ConvertedVolume.USD,

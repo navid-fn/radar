@@ -158,25 +158,21 @@ func (bw *BaseWebSocketWorker) HandleConnection(ctx context.Context, workerID st
 		return err
 	})
 
-	// Subscribe to symbols
 	if bw.OnSubscribe != nil {
 		if err := bw.OnSubscribe(conn, symbolsChunk); err != nil {
 			return fmt.Errorf("failed to subscribe: %w", err)
 		}
 	}
 
-	// Setup tickers
 	pingTicker := time.NewTicker(bw.Config.PingInterval)
 	defer pingTicker.Stop()
 
 	healthTicker := time.NewTicker(HealthCheckInterval)
 	defer healthTicker.Stop()
 
-	// Setup channels
 	readErrors := make(chan error, 1)
 	messages := make(chan []byte, 100)
 
-	// Start message reader
 	go func() {
 		defer close(messages)
 		defer close(readErrors)
@@ -238,7 +234,6 @@ func (bw *BaseWebSocketWorker) HandleConnection(ctx context.Context, workerID st
 				finalMessage = message
 			}
 
-			// Send to Kafka
 			if err := bw.SendToKafka(finalMessage); err != nil {
 				bw.Logger.Errorf("[%s] Failed to send to Kafka: %v", workerID, err)
 			}
@@ -269,5 +264,3 @@ func (bw *BaseWebSocketWorker) HandleConnection(ctx context.Context, workerID st
 		}
 	}
 }
-
-

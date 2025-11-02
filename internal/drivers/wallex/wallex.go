@@ -34,7 +34,6 @@ type WallexCrawler struct {
 	wsWorker *crawler.BaseWebSocketWorker
 }
 
-// NewWallexCrawler creates a new Wallex crawler instance for trades
 func NewWallexCrawler() *WallexCrawler {
 	config := crawler.NewConfig("wallex", MaxSubsPerConnection)
 	baseCrawler := crawler.NewBaseCrawler(config)
@@ -43,13 +42,11 @@ func NewWallexCrawler() *WallexCrawler {
 		BaseCrawler: baseCrawler,
 	}
 
-	// Setup WebSocket worker for trades
 	wsConfig := crawler.DefaultWebSocketConfig(WallexWSURL)
 	wsConfig.HandshakeTimeout = 4 * time.Second
 
 	wc.wsWorker = crawler.NewBaseWebSocketWorker(wsConfig, wc.Logger, wc.SendToKafka)
 
-	// Configure subscription for trades
 	wc.wsWorker.OnSubscribe = func(conn *websocket.Conn, symbols []string) error {
 		wc.Logger.Infof("Subscribing to %d markets for trades...", len(symbols))
 		for _, symbol := range symbols {
@@ -66,12 +63,10 @@ func NewWallexCrawler() *WallexCrawler {
 	return wc
 }
 
-// GetName returns the exchange name
 func (wc *WallexCrawler) GetName() string {
 	return "wallex"
 }
 
-// FetchMarkets fetches all trading markets from Wallex API
 func (wc *WallexCrawler) FetchMarkets() ([]string, error) {
 	resp, err := http.Get(WallexAPIURL)
 	if err != nil {
@@ -99,11 +94,9 @@ func (wc *WallexCrawler) FetchMarkets() ([]string, error) {
 	return markets, nil
 }
 
-// Run starts the Wallex crawler
 func (wc *WallexCrawler) Run(ctx context.Context) error {
 	wc.Logger.Info("Starting Wallex Crawler (trades mode)...")
 
-	// Initialize Kafka producer
 	if err := wc.InitKafkaProducer(); err != nil {
 		return fmt.Errorf("failed to initialize Kafka producer: %w", err)
 	}
@@ -111,7 +104,6 @@ func (wc *WallexCrawler) Run(ctx context.Context) error {
 
 	wc.StartDeliveryReport()
 
-	// Fetch markets
 	markets, err := wc.FetchMarkets()
 	if err != nil {
 		return fmt.Errorf("could not fetch markets: %w", err)
@@ -121,12 +113,10 @@ func (wc *WallexCrawler) Run(ctx context.Context) error {
 		return fmt.Errorf("no markets found to subscribe to")
 	}
 
-	// Chunk markets
 	marketChunks := crawler.ChunkMarkets(markets, wc.Config.MaxSubsPerConnection)
 	wc.Logger.Infof("Divided %d markets into %d chunks of ~%d",
 		len(markets), len(marketChunks), wc.Config.MaxSubsPerConnection)
 
-	// Start workers
 	return crawler.RunWithGracefulShutdown(wc.Logger, func(ctx context.Context, wg *sync.WaitGroup) {
 		for _, chunk := range marketChunks {
 			wg.Add(1)

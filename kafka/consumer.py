@@ -82,7 +82,7 @@ def setup_database(client):
             event_time      DateTime,
             inserted_at     DateTime DEFAULT now()
         ) ENGINE = ReplacingMergeTree()
-        ORDER BY (source, trade_id)
+        ORDER BY (source, inserted_at)
         """
         )
         logging.info("Database and unified table setup complete.")
@@ -127,40 +127,9 @@ def _transform_wallex_trade(data):
         return []
 
 
-def _transform_coingecko_data(data):
-    """Transforms a trade message from the Coingecko format."""
-    try:
-        symbol = data.get("symbol", "") + "/USDT"
-        exchange = data.get("exchange")
-        side = data.get("side", "all")
-        price_str = data.get("price", "0.0")
-        volume = data.get("volume", "0.0")
-        quantity = data.get("quantity")
-        timestamp_str = data.get("time")
-
-        unique_string = f"wallex-{symbol}-{timestamp_str}-{price_str}-{quantity}-{side}"
-        trade_id = hashlib.sha1(unique_string.encode("utf-8")).hexdigest()
-
-        event_time = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
-
-        row = (
-            trade_id,
-            exchange,
-            symbol,
-            side,
-            float(price_str),
-            float(volume),
-            quantity,
-            event_time,
-        )
-        return [row]  # Return as a list for consistency
-    except Exception as e:
-        logging.error(f"Failed to transform Wallex trade. Error: {e}. Data: {data}")
-        return []
-
-
 def _transform_bitpin_matches(data):
     """Transforms a trade message from the Bitpin 'matches_update' format."""
+    print(data)
     try:
         symbol = data.get("symbol")
         event_time_str = data.get("event_time")
@@ -183,39 +152,6 @@ def _transform_bitpin_matches(data):
         return transformed_rows
     except Exception as e:
         logging.error(f"Failed to transform Bitpin matches. Error: {e}. Data: {data}")
-        return []
-
-
-def _transform_tabdeal_matches(data):
-    """Transforms a trade message from the Bitpin 'matches_update' format.
-    {'id': 159176050, 'price': '8161.0000000000000000', 'qty': '7.35120000',
-    'quoteqty': '7.33061664', 'isBuyerMaker': False, 'symbol': 'CTSIIRT',
-    'exchange': 'tabdeal', 'time': '2025-09-28T19:42:31.117+03:30'}
-    """
-    try:
-
-        symbol = data.get("symbol")
-        side = "buy" if data.get("isBuyerMaker", False) else "sell"
-        price_str = data.get("price", "0.0")
-        quantity_str = data.get("qty", "0.0")
-        time = data.get("time")
-        trade_id = str(data.get("id"))
-
-        event_time = datetime.fromisoformat(time)
-
-        row = (
-            trade_id,
-            "tabdeal",
-            symbol,
-            side,
-            float(price_str),
-            float(quantity_str),
-            Decimal(price_str) * Decimal(quantity_str),
-            event_time,
-        )
-        return [row]  # Return as a list for consistency
-    except Exception as e:
-        logging.error(f"Failed to transform Wallex trade. Error: {e}. Data: {data}")
         return []
 
 
@@ -254,27 +190,44 @@ def _transform_ramzinex_matches(data):
         return []
 
 
-def _transform_nobitex_matches(data):
+def transform_kafka_to_row(data):
+    exchange = data.get("exchange")
     symbol = data.get("symbol")
-    side = data.get("type")
-    price_str = data.get("price")
-    quantity_str = data.get("volume")
-    time = data.get("time")
-
-    unique_string = f"nobitex-{symbol}-{time}-{price_str}-{quantity_str}-{side}"
-    trade_id = hashlib.sha1(unique_string.encode("utf-8")).hexdigest()
+    side = data.get("side")
+    price = data.get("price")
+    volume = data.get("volume")
+    quantity = data.get("quantity")
+    time_of_trade = data.get("time")
+    trade_id = data.get("id")
+    if not trade_id:
+        unique_string = f"nobitex-{symbol}-{time_of_trade}-{price}-{volume}-{side}"
+        trade_id = hashlib.sha1(unique_string.encode("utf-8")).hexdigest()
 
     row = (
         trade_id,
-        "nobitex",
+        exchange,
         symbol,
         side,
-        float(price_str),
-        float(quantity_str),
-        Decimal(price_str) * Decimal(quantity_str),
-        datetime.fromisoformat(time),
+        float(price),
+        float(volume),
+        quantity,
+        datetime.fromisoformat(time_of_trade),
     )
-    return [row]  # Return as a list for consistency
+    return row  # Return as a list for consistency
+
+
+def proccess_kafka_data(data):
+    try:
+        if isinstance(data, list):
+            transformed_data = []
+            for d in data:
+                transformed_data.append(transform_kafka_to_row(d))
+            return transformed_data
+        else:
+            return [transform_kafka_to_row(data)]
+    except Exception as e:
+        logging.error(f"Failed to transform data. Error: {e}.")
+        return []
 
 
 def parse_and_transform(message_value):
@@ -283,21 +236,13 @@ def parse_and_transform(message_value):
     """
     try:
         data = json.loads(message_value)
-        if isinstance(data, dict) and data.get("exchange") == "binance":
-            return _transform_coingecko_data(data)
         # Heuristic to determine the source based on message structure
         if isinstance(data, list) and len(data) == 2:
             return _transform_wallex_trade(data)
-        elif isinstance(data, dict) and data.get("event") == "matches_update":
-            return _transform_bitpin_matches(data)
-        elif isinstance(data, dict) and data.get("exchange") == "tabdeal":
-            return _transform_tabdeal_matches(data)
-        elif isinstance(data, dict) and data.get("exchange") == "nobitex":
-            return _transform_nobitex_matches(data)
         elif isinstance(data, dict) and data.get("channel"):
             return _transform_ramzinex_matches(data)
         else:
-            return []
+            return proccess_kafka_data(data)
     except Exception as e:
         logging.error(f"Failed to parse JSON. Error: {e}.")
         return []

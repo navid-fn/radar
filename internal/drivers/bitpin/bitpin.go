@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -25,6 +26,24 @@ type Market struct {
 	Tradeable bool   `json:"tradable"`
 }
 
+type MessageType struct {
+	Event string `json:"event"`
+}
+type MatcheData struct{
+	ID string `json:"id"`
+	Price string `json:"price"`
+	Volume string `json:"base_amount"`
+	Quantity string `json:"quate_amount"`
+	Side string `json:"side"`
+}
+
+type MatchesUpdate struct {
+	Matches []MatcheData `json:"matches"`
+	Symbol string `json:"symbol"`
+	Time string `json:"event_time"`
+}
+
+
 type BitpinCrawler struct {
 	*crawler.BaseCrawler
 	wsWorker *crawler.BaseWebSocketWorker
@@ -42,12 +61,50 @@ func NewBitpinCrawler() *BitpinCrawler {
 	bc.wsWorker = crawler.NewBaseWebSocketWorker(wsConfig, bc.Logger, bc.SendToKafka)
 
 	bc.wsWorker.OnMessage = func(message []byte) ([]byte, error) {
+
 		messageStr := string(message)
 		if messageStr == `{"message":"PONG"}` {
 			bc.Logger.Debug("PONG received")
 			return nil, nil
 		}
-		return message, nil
+		var messageType MessageType
+		err := json.Unmarshal(message, &messageType)
+		if err != nil {
+			return nil, nil
+		}
+
+		if messageType.Event == "matches_update" {
+			var matchesUpdate MatchesUpdate
+			err := json.Unmarshal(message, &matchesUpdate)
+			if err != nil {
+				return nil, nil
+			}
+
+			
+			var messageToSend []crawler.KafkaData
+			for _, t := range matchesUpdate.Matches {
+				volume, _:= strconv.ParseFloat(t.Volume, 64)
+				price, _ := strconv.ParseFloat(t.Price, 64)
+				quantity, _ := strconv.ParseFloat(t.Quantity, 64)
+				match_time := matchesUpdate.Time
+
+				data := crawler.KafkaData {
+					Exchange: "bitpin",
+					Side: t.Side,
+					Volume: volume,
+					Price: price,
+					Quantity: quantity,
+					Time: match_time,
+				}
+				messageToSend = append(messageToSend, data)
+			}
+			jsonData, err := json.Marshal(messageToSend)
+			if err != nil {
+				return nil, nil
+			}
+			return jsonData, nil
+		}
+		return nil, nil
 	}
 
 	bc.wsWorker.OnSubscribe = func(conn *websocket.Conn, symbols []string) error {

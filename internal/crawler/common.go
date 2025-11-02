@@ -66,6 +66,17 @@ func NewConfig(exchangeName string, maxSubs int) *Config {
 	}
 }
 
+type KafkaData struct {
+	ID       string  `json:"ID"`
+	Exchange string  `json:"exchange"`
+	Symbol   string  `json:"symbol"`
+	Price    float64 `json:"price"`
+	Volume   float64 `json:"volume"`
+	Quantity float64 `json:"quantity"`
+	Side     string  `json:"side"`
+	Time     string  `json:"time"`
+}
+
 func NewBaseCrawler(config *Config) *BaseCrawler {
 	return &BaseCrawler{
 		Config: config,
@@ -157,5 +168,3 @@ func RunWithGracefulShutdown(
 
 	return nil
 }
-
-
