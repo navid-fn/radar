@@ -84,18 +84,14 @@ func NewRamzinexCrawler() *RamzinexCrawler {
 	rc.wsWorker.OnMessage = func(conn *websocket.Conn, message []byte) ([]byte, error) {
 		messageStr := strings.TrimSpace(string(message))
 
-		// Handle ping/pong - Ramzinex sends {} as ping, we must respond with {}
-		// More robust detection: check if it's an empty JSON object
 		if messageStr == "{}" || messageStr == "{}\n" || messageStr == "{}\r\n" {
-			// Send pong response immediately using the connection
 			if err := rc.wsWorker.SendPong(conn); err != nil {
 				rc.Logger.Errorf("Failed to send pong: %v", err)
 			}
 			return nil, nil
 		}
 
-		// Also check if unmarshaling as empty JSON object succeeds
-		var emptyCheck map[string]interface{}
+		var emptyCheck map[string]any
 		if err := json.Unmarshal(message, &emptyCheck); err == nil && len(emptyCheck) == 0 {
 			if err := rc.wsWorker.SendPong(conn); err != nil {
 				rc.Logger.Errorf("Failed to send pong: %v", err)

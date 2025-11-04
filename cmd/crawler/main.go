@@ -31,7 +31,6 @@ func main() {
 
     selected := []string{}
     if exchanges != "" {
-        // Parse comma-separated list
         parts := strings.Split(exchanges, ",")
         for _, p := range parts {
             name := strings.TrimSpace(p)
@@ -42,7 +41,6 @@ func main() {
     } else if exchange != "" {
         selected = append(selected, exchange)
     } else {
-        // No selection provided
         fmt.Fprintf(os.Stderr, "Error: either -exchange or -exchanges flag is required\n")
         fmt.Fprintf(os.Stderr, "Usage: %s -exchange <name> OR -exchanges <a,b,c>\n", os.Args[0])
         fmt.Fprintf(os.Stderr, "\nAvailable exchanges:\n")
@@ -59,7 +57,6 @@ func main() {
         os.Exit(1)
     }
 
-    // Build crawlers
     crawlers := make([]crawler.Crawler, 0, len(selected))
     for _, name := range selected {
         switch name {
@@ -82,7 +79,6 @@ func main() {
 
     logger.Infof("Starting crawlers: %s", strings.Join(selected, ", "))
 
-    // Context with graceful shutdown on SIGINT/SIGTERM
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
 
@@ -103,7 +99,6 @@ func main() {
         }(c)
     }
 
-    // Wait for a signal or an error
     select {
     case sig := <-sigCh:
         logger.Warnf("Received signal: %v. Shutting down...", sig)
