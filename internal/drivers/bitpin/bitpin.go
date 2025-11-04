@@ -29,20 +29,19 @@ type Market struct {
 type MessageType struct {
 	Event string `json:"event"`
 }
-type MatcheData struct{
-	ID string `json:"id"`
-	Price string `json:"price"`
-	Volume string `json:"base_amount"`
+type MatcheData struct {
+	ID       string `json:"id"`
+	Price    string `json:"price"`
+	Volume   string `json:"base_amount"`
 	Quantity string `json:"quate_amount"`
-	Side string `json:"side"`
+	Side     string `json:"side"`
 }
 
 type MatchesUpdate struct {
 	Matches []MatcheData `json:"matches"`
-	Symbol string `json:"symbol"`
-	Time string `json:"event_time"`
+	Symbol  string       `json:"symbol"`
+	Time    string       `json:"event_time"`
 }
-
 
 type BitpinCrawler struct {
 	*crawler.BaseCrawler
@@ -60,8 +59,7 @@ func NewBitpinCrawler() *BitpinCrawler {
 	wsConfig := crawler.DefaultWebSocketConfig(BitpinWSURL)
 	bc.wsWorker = crawler.NewBaseWebSocketWorker(wsConfig, bc.Logger, bc.SendToKafka)
 
-	bc.wsWorker.OnMessage = func(message []byte) ([]byte, error) {
-
+	bc.wsWorker.OnMessage = func(conn *websocket.Conn, message []byte) ([]byte, error) {
 		messageStr := string(message)
 		if messageStr == `{"message":"PONG"}` {
 			bc.Logger.Debug("PONG received")
@@ -80,21 +78,20 @@ func NewBitpinCrawler() *BitpinCrawler {
 				return nil, nil
 			}
 
-			
 			var messageToSend []crawler.KafkaData
 			for _, t := range matchesUpdate.Matches {
-				volume, _:= strconv.ParseFloat(t.Volume, 64)
+				volume, _ := strconv.ParseFloat(t.Volume, 64)
 				price, _ := strconv.ParseFloat(t.Price, 64)
 				quantity, _ := strconv.ParseFloat(t.Quantity, 64)
 				match_time := matchesUpdate.Time
 
-				data := crawler.KafkaData {
+				data := crawler.KafkaData{
 					Exchange: "bitpin",
-					Side: t.Side,
-					Volume: volume,
-					Price: price,
+					Side:     t.Side,
+					Volume:   volume,
+					Price:    price,
 					Quantity: quantity,
-					Time: match_time,
+					Time:     match_time,
 				}
 				messageToSend = append(messageToSend, data)
 			}
@@ -113,8 +110,7 @@ func NewBitpinCrawler() *BitpinCrawler {
 			"symbols": symbols,
 		}
 
-		conn.SetWriteDeadline(time.Now().Add(wsConfig.WriteTimeout))
-		if err := conn.WriteJSON(subscriptionMsg); err != nil {
+		if err := bc.wsWorker.WriteJSON(conn, subscriptionMsg); err != nil {
 			return fmt.Errorf("failed to send subscription message: %w", err)
 		}
 
@@ -198,6 +194,3 @@ func (bc *BitpinCrawler) Run(ctx context.Context) error {
 		}
 	})
 }
-
-
-

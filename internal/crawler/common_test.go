@@ -95,3 +95,4 @@ func TestNewBaseCrawler(t *testing.T) {
 		t.Error("Expected KafkaProducer to be nil before initialization")
 	}
 }
+

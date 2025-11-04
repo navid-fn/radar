@@ -51,7 +51,6 @@ type APIResponse struct {
 type RamzinexCrawler struct {
 	*crawler.BaseCrawler
 	wsWorker     *crawler.BaseWebSocketWorker
-	tradeTracker *crawler.TradeTracker
 	pairIDToName map[int]string
 }
 
@@ -61,7 +60,6 @@ func NewRamzinexCrawler() *RamzinexCrawler {
 
 	rc := &RamzinexCrawler{
 		BaseCrawler:  baseCrawler,
-		tradeTracker: crawler.NewTradeTracker(),
 		pairIDToName: make(map[int]string),
 	}
 
@@ -75,8 +73,7 @@ func NewRamzinexCrawler() *RamzinexCrawler {
 			},
 			"id": 1,
 		}
-		conn.SetWriteDeadline(time.Now().Add(wsConfig.WriteTimeout))
-		if err := conn.WriteJSON(connectMsg); err != nil {
+		if err := rc.wsWorker.WriteJSON(conn, connectMsg); err != nil {
 			return fmt.Errorf("failed to send connect message: %w", err)
 		}
 		rc.Logger.Info("Sent connect message")
@@ -84,10 +81,25 @@ func NewRamzinexCrawler() *RamzinexCrawler {
 		return nil
 	}
 
-	rc.wsWorker.OnMessage = func(message []byte) ([]byte, error) {
-		messageStr := string(message)
+	rc.wsWorker.OnMessage = func(conn *websocket.Conn, message []byte) ([]byte, error) {
+		messageStr := strings.TrimSpace(string(message))
 
-		if messageStr == "{}" || messageStr == "{}\n" || len(strings.TrimSpace(messageStr)) == 2 {
+		// Handle ping/pong - Ramzinex sends {} as ping, we must respond with {}
+		// More robust detection: check if it's an empty JSON object
+		if messageStr == "{}" || messageStr == "{}\n" || messageStr == "{}\r\n" {
+			// Send pong response immediately using the connection
+			if err := rc.wsWorker.SendPong(conn); err != nil {
+				rc.Logger.Errorf("Failed to send pong: %v", err)
+			}
+			return nil, nil
+		}
+
+		// Also check if unmarshaling as empty JSON object succeeds
+		var emptyCheck map[string]interface{}
+		if err := json.Unmarshal(message, &emptyCheck); err == nil && len(emptyCheck) == 0 {
+			if err := rc.wsWorker.SendPong(conn); err != nil {
+				rc.Logger.Errorf("Failed to send pong: %v", err)
+			}
 			return nil, nil
 		}
 
@@ -107,18 +119,40 @@ func NewRamzinexCrawler() *RamzinexCrawler {
 								var pairID int
 								if _, err := fmt.Sscanf(parts[1], "%d", &pairID); err == nil {
 									if pairName, found := rc.pairIDToName[pairID]; found {
-										channelName := fmt.Sprintf("last-trades:%s", pairName)
+										// Process trades directly without duplication check
+										tradesArray, ok := data.([]any)
+										if ok && len(tradesArray) > 0 {
+											var listOfKafkaMsg []crawler.KafkaData
+											for _, trade := range tradesArray {
+												row, ok := trade.([]any)
+												if !ok || len(row) < 6 {
+													continue
+												}
 
-										filteredTrades := rc.filterDuplicateTrades(channelName, data)
+												id := row[5].(string)
+												side := row[3].(string)
+												price := row[0].(float64)
+												volume := row[1].(float64)
+												quantity := price * volume
+												time := row[2].(string)
 
-										if len(filteredTrades) > 0 {
-											kafkaMsg := map[string]any{
-												"channel": channelName,
-												"data":    filteredTrades,
+												dataToSendKafka := crawler.KafkaData{
+													Exchange: "ramzinex",
+													Symbol:   pairName,
+													Side:     side,
+													ID:       id,
+													Price:    price,
+													Volume:   volume,
+													Quantity: quantity,
+													Time:     time,
+												}
+												listOfKafkaMsg = append(listOfKafkaMsg, dataToSendKafka)
 											}
 
-											kafkaMsgBytes, _ := json.Marshal(kafkaMsg)
-											return kafkaMsgBytes, nil
+											if len(listOfKafkaMsg) > 0 {
+												kafkaMsgBytes, _ := json.Marshal(listOfKafkaMsg)
+												return kafkaMsgBytes, nil
+											}
 										}
 									}
 								}
@@ -177,46 +211,6 @@ func (rc *RamzinexCrawler) FetchMarkets() ([]PairDetail, error) {
 	return pairs, nil
 }
 
-func (rc *RamzinexCrawler) filterDuplicateTrades(channel string, data any) []interface{} {
-	var filteredTrades []any
-
-	tradesArray, ok := data.([]any)
-	if !ok {
-		return filteredTrades
-	}
-
-	totalTrades := len(tradesArray)
-	duplicatesCount := 0
-
-	for _, trade := range tradesArray {
-		tradeArray, ok := trade.([]any)
-		if !ok || len(tradeArray) < 6 {
-			continue
-		}
-
-		tradeHash, ok := tradeArray[5].(string)
-		if !ok || tradeHash == "" {
-			filteredTrades = append(filteredTrades, trade)
-			continue
-		}
-
-		if rc.tradeTracker.IsTradeProcessed(channel, tradeHash) {
-			duplicatesCount++
-			continue
-		}
-
-		rc.tradeTracker.MarkTradeProcessed(channel, tradeHash)
-		filteredTrades = append(filteredTrades, trade)
-	}
-
-	if duplicatesCount > 0 {
-		rc.Logger.Infof("Channel %s - Filtered %d duplicates out of %d trades, sending %d unique trades",
-			channel, duplicatesCount, totalTrades, len(filteredTrades))
-	}
-
-	return filteredTrades
-}
-
 func chunkPairs(pairs []PairDetail, chunkSize int) [][]PairDetail {
 	var chunks [][]PairDetail
 	for i := 0; i < len(pairs); i += chunkSize {
@@ -266,8 +260,7 @@ func (rc *RamzinexCrawler) Run(ctx context.Context) error {
 						},
 					}
 
-					conn.SetWriteDeadline(time.Now().Add(rc.wsWorker.Config.WriteTimeout))
-					if err := conn.WriteJSON(subscriptionMsg); err != nil {
+					if err := rc.wsWorker.WriteJSON(conn, subscriptionMsg); err != nil {
 						return fmt.Errorf("failed to send subscription message for %s: %w", pair.Name, err)
 					}
 
@@ -292,7 +285,3 @@ func (rc *RamzinexCrawler) Run(ctx context.Context) error {
 		}
 	})
 }
-
-
-
-

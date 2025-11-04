@@ -38,9 +38,10 @@ type BaseWebSocketWorker struct {
 	Config      *WebSocketConfig
 	Logger      *logrus.Logger
 	SendToKafka func([]byte) error
-	OnMessage   func([]byte) ([]byte, error) // Optional message transformation
-	OnConnect   func(*websocket.Conn) error  // Optional connection setup
+	OnMessage   func(*websocket.Conn, []byte) ([]byte, error) // Optional message transformation, receives conn and message
+	OnConnect   func(*websocket.Conn) error                   // Optional connection setup
 	OnSubscribe func(*websocket.Conn, []string) error
+	writeMutex  sync.Mutex // Protects all writes (per connection, but shared for safety)
 }
 
 // NewBaseWebSocketWorker creates a new BaseWebSocketWorker
@@ -151,6 +152,8 @@ func (bw *BaseWebSocketWorker) HandleConnection(ctx context.Context, workerID st
 	})
 
 	conn.SetPingHandler(func(message string) error {
+		bw.writeMutex.Lock()
+		defer bw.writeMutex.Unlock()
 		err := conn.WriteControl(websocket.PongMessage, []byte(message), time.Now().Add(bw.Config.WriteTimeout))
 		if err != nil {
 			bw.Logger.Errorf("[%s] Failed to send pong: %v", workerID, err)
@@ -220,13 +223,13 @@ func (bw *BaseWebSocketWorker) HandleConnection(ctx context.Context, workerID st
 			// Optional message transformation
 			var finalMessage []byte
 			if bw.OnMessage != nil {
-				transformed, err := bw.OnMessage(message)
+				transformed, err := bw.OnMessage(conn, message)
 				if err != nil {
 					bw.Logger.Errorf("[%s] Failed to transform message: %v", workerID, err)
 					continue
 				}
 				if transformed == nil {
-					// nil means skip this message
+					// nil means skip this message (e.g., ping/pong handled)
 					continue
 				}
 				finalMessage = transformed
@@ -234,13 +237,18 @@ func (bw *BaseWebSocketWorker) HandleConnection(ctx context.Context, workerID st
 				finalMessage = message
 			}
 
-			if err := bw.SendToKafka(finalMessage); err != nil {
-				bw.Logger.Errorf("[%s] Failed to send to Kafka: %v", workerID, err)
+			if finalMessage != nil && len(finalMessage) > 0 {
+				if err := bw.SendToKafka(finalMessage); err != nil {
+					bw.Logger.Errorf("[%s] Failed to send to Kafka: %v", workerID, err)
+				}
 			}
 
 		case <-pingTicker.C:
+			bw.writeMutex.Lock()
 			conn.SetWriteDeadline(time.Now().Add(bw.Config.WriteTimeout))
-			if err := conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
+			err := conn.WriteMessage(websocket.PingMessage, []byte{})
+			bw.writeMutex.Unlock()
+			if err != nil {
 				return fmt.Errorf("failed to send ping: %w", err)
 			}
 
@@ -265,4 +273,37 @@ func (bw *BaseWebSocketWorker) HandleConnection(ctx context.Context, workerID st
 	}
 }
 
+// SendPong sends a pong message (empty JSON) to the WebSocket connection
+func (bw *BaseWebSocketWorker) SendPong(conn *websocket.Conn) error {
+	bw.writeMutex.Lock()
+	defer bw.writeMutex.Unlock()
 
+	if conn == nil {
+		return fmt.Errorf("no connection provided")
+	}
+
+	conn.SetWriteDeadline(time.Now().Add(bw.Config.WriteTimeout))
+	if err := conn.WriteMessage(websocket.TextMessage, []byte("{}")); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// WriteJSON safely writes JSON message to WebSocket with mutex protection
+func (bw *BaseWebSocketWorker) WriteJSON(conn *websocket.Conn, v interface{}) error {
+	bw.writeMutex.Lock()
+	defer bw.writeMutex.Unlock()
+
+	conn.SetWriteDeadline(time.Now().Add(bw.Config.WriteTimeout))
+	return conn.WriteJSON(v)
+}
+
+// WriteMessage safely writes message to WebSocket with mutex protection
+func (bw *BaseWebSocketWorker) WriteMessage(conn *websocket.Conn, messageType int, data []byte) error {
+	bw.writeMutex.Lock()
+	defer bw.writeMutex.Unlock()
+
+	conn.SetWriteDeadline(time.Now().Add(bw.Config.WriteTimeout))
+	return conn.WriteMessage(messageType, data)
+}

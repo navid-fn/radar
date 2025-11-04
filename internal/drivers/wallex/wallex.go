@@ -50,9 +50,8 @@ func NewWallexCrawler() *WallexCrawler {
 	wc.wsWorker.OnSubscribe = func(conn *websocket.Conn, symbols []string) error {
 		wc.Logger.Infof("Subscribing to %d markets for trades...", len(symbols))
 		for _, symbol := range symbols {
-			conn.SetWriteDeadline(time.Now().Add(wsConfig.WriteTimeout))
 			subscriptionMsg := []any{"subscribe", map[string]string{"channel": fmt.Sprintf("%s@trade", symbol)}}
-			if err := conn.WriteJSON(subscriptionMsg); err != nil {
+			if err := wc.wsWorker.WriteJSON(conn, subscriptionMsg); err != nil {
 				return fmt.Errorf("failed to send subscription message: %w", err)
 			}
 		}

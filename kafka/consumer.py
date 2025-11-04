@@ -67,8 +67,6 @@ def setup_database(client):
         client.execute(f"CREATE DATABASE IF NOT EXISTS {CLICKHOUSE_DB}")
 
         logging.info(f"Creating table '{CLICKHOUSE_TABLE}' if not exists...")
-        # --- MODIFICATION: Unified schema with a 'source' column ---
-        # The key for deduplication is now a combination of source and trade_id.
         client.execute(
             f"""
         CREATE TABLE IF NOT EXISTS {CLICKHOUSE_DB}.{CLICKHOUSE_TABLE} (
@@ -82,113 +80,13 @@ def setup_database(client):
             event_time      DateTime,
             inserted_at     DateTime DEFAULT now()
         ) ENGINE = ReplacingMergeTree()
-        ORDER BY (source, inserted_at)
+        ORDER BY (source, trade_id)
         """
         )
         logging.info("Database and unified table setup complete.")
     except Exception as e:
         logging.error(f"Error during database setup: {e}")
         return
-
-
-def _transform_wallex_trade(data):
-    """Transforms a trade message from the Wallex format."""
-    try:
-        symbol_part, trade_data = data
-        symbol = symbol_part.split("@")[0]
-        side = "buy" if trade_data.get("isBuyOrder", False) else "sell"
-        price_str = trade_data.get("price", "0.0")
-        quantity_str = trade_data.get(
-            "quantity", "0.0"
-        )  # Wallex 'quantity' is the base_amount
-        timestamp_str = trade_data.get("timestamp")
-
-        # Create synthetic ID for Wallex trades
-        unique_string = (
-            f"wallex-{symbol}-{timestamp_str}-{price_str}-{quantity_str}-{side}"
-        )
-        trade_id = hashlib.sha1(unique_string.encode("utf-8")).hexdigest()
-
-        event_time = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
-
-        row = (
-            trade_id,
-            "wallex",
-            symbol,
-            side,
-            float(price_str),
-            float(quantity_str),
-            Decimal(price_str) * Decimal(quantity_str),
-            event_time,
-        )
-        return [row]  # Return as a list for consistency
-    except Exception as e:
-        logging.error(f"Failed to transform Wallex trade. Error: {e}. Data: {data}")
-        return []
-
-
-def _transform_bitpin_matches(data):
-    """Transforms a trade message from the Bitpin 'matches_update' format."""
-    print(data)
-    try:
-        symbol = data.get("symbol")
-        event_time_str = data.get("event_time")
-        matches = data.get("matches", [])
-        event_time = datetime.fromisoformat(event_time_str.replace("Z", "+00:00"))
-
-        transformed_rows = []
-        for match in matches:
-            row = (
-                match.get("id"),
-                "bitpin",
-                symbol,
-                match.get("side"),
-                float(match.get("price", 0.0)),
-                float(match.get("base_amount", 0.0)),
-                float(match.get("quote_amount", 0.0)),
-                event_time,
-            )
-            transformed_rows.append(row)
-        return transformed_rows
-    except Exception as e:
-        logging.error(f"Failed to transform Bitpin matches. Error: {e}. Data: {data}")
-        return []
-
-
-def _transform_ramzinex_matches(data):
-    """
-    {
-    'channel': 'last-trades:bitcoin/rial',
-    'data': [[132622066875,
-              1.6e-05,
-              '2025-10-01 12:09:05',
-              'sell',
-              1759320545,
-              'dfaef1dead062f3053a1ce68753ccc4c']]
-    }
-
-    """
-    try:
-        symbol = data.get("channel").split("last-trades:")[1]
-        transformed_rows = []
-        for trade in data.get("data"):
-            row = (
-                trade[5],
-                "ramzinex",
-                symbol,
-                trade[3],
-                float(trade[0]),
-                Decimal(trade[1]),
-                Decimal(trade[0]) * Decimal(trade[1]),
-                datetime.fromisoformat(trade[2]),
-            )
-            transformed_rows.append(row)
-        return transformed_rows
-
-    except Exception as e:
-        logging.error(f"Failed to transform Wallex trade. Error: {e}. Data: {data}")
-        return []
-
 
 def transform_kafka_to_row(data):
     exchange = data.get("exchange")
@@ -236,13 +134,7 @@ def parse_and_transform(message_value):
     """
     try:
         data = json.loads(message_value)
-        # Heuristic to determine the source based on message structure
-        if isinstance(data, list) and len(data) == 2:
-            return _transform_wallex_trade(data)
-        elif isinstance(data, dict) and data.get("channel"):
-            return _transform_ramzinex_matches(data)
-        else:
-            return proccess_kafka_data(data)
+        return proccess_kafka_data(data)
     except Exception as e:
         logging.error(f"Failed to parse JSON. Error: {e}.")
         return []
