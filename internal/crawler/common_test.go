@@ -5,14 +5,10 @@ import (
 )
 
 func TestNewConfig(t *testing.T) {
-	config := NewConfig("testexchange", "test_topic", 10)
+	config := NewConfig("testexchange", 10)
 
 	if config.ExchangeName != "testexchange" {
 		t.Errorf("Expected ExchangeName 'testexchange', got '%s'", config.ExchangeName)
-	}
-
-	if config.KafkaTopic != "test_topic" {
-		t.Errorf("Expected KafkaTopic 'test_topic', got '%s'", config.KafkaTopic)
 	}
 
 	if config.MaxSubsPerConnection != 10 {
@@ -30,7 +26,7 @@ func TestNewConfig(t *testing.T) {
 }
 
 func TestNewConfigDefaults(t *testing.T) {
-	config := NewConfig("testexchange", "", 0)
+	config := NewConfig("testexchange", 0)
 
 	if config.KafkaTopic != DefaultKafkaTopic {
 		t.Errorf("Expected default KafkaTopic '%s', got '%s'", DefaultKafkaTopic, config.KafkaTopic)
@@ -84,7 +80,7 @@ func TestNewLogger(t *testing.T) {
 }
 
 func TestNewBaseCrawler(t *testing.T) {
-	config := NewConfig("testexchange", "test_topic", 10)
+	config := NewConfig("testexchange", 10)
 	baseCrawler := NewBaseCrawler(config)
 
 	if baseCrawler.Config != config {
@@ -99,5 +95,3 @@ func TestNewBaseCrawler(t *testing.T) {
 		t.Error("Expected KafkaProducer to be nil before initialization")
 	}
 }
-
-

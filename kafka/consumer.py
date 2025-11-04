@@ -200,7 +200,7 @@ def transform_kafka_to_row(data):
     time_of_trade = data.get("time")
     trade_id = data.get("id")
     if not trade_id:
-        unique_string = f"nobitex-{symbol}-{time_of_trade}-{price}-{volume}-{side}"
+        unique_string = f"{exchange}-{symbol}-{time_of_trade}-{price}-{volume}-{side}"
         trade_id = hashlib.sha1(unique_string.encode("utf-8")).hexdigest()
 
     row = (
