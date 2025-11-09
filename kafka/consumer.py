@@ -20,8 +20,8 @@ KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "clickhouse-consumers-v3")
 
 CLICKHOUSE_HOST = os.getenv("CLICKHOUSE_HOST", "localhost")
 CLICKHOUSE_PORT = os.getenv("CLICKHOUSE_PORT", "9000")
-CLICKHOUSE_DB = os.getenv("CLICKHOUSE_DB", "trades")
-CLICKHOUSE_TABLE = os.getenv("CLICKHOUSE_TABLE", "trades_master")
+CLICKHOUSE_DB = os.getenv("CLICKHOUSE_DB", "radar")
+CLICKHOUSE_TABLE = 'trade'
 CLICKHOUSE_USER = os.getenv("CLICKHOUSE_USER", "default")
 CLICKHOUSE_PASSWORD = os.getenv("CLICKHOUSE_PASSWORD", "default")
 

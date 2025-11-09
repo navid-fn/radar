@@ -39,7 +39,6 @@ type ConvertedData struct {
 	USD float64 `json:"usd"`
 }
 
-
 type CoinGeckoCrawler struct {
 	*crawler.BaseCrawler
 	httpClient *http.Client
@@ -73,17 +72,37 @@ func (cgc *CoinGeckoCrawler) Run(ctx context.Context) error {
 
 	cgc.StartDeliveryReport()
 
-	cgc.Logger.Info("Starting data fetch...")
+	cgc.Logger.Info("Starting initial data fetch...")
 	if err := cgc.fetchAndSend(ctx); err != nil {
-		cgc.Logger.Errorf("Fetch failed: %v", err)
-		return fmt.Errorf("failed to fetch and send data: %w", err)
+		if err == context.Canceled {
+			cgc.Logger.Info("Initial fetch cancelled")
+			return nil
+		}
+		cgc.Logger.Errorf("Initial fetch failed: %v", err)
 	}
 
-	cgc.Logger.Info("Waiting for Kafka to flush remaining messages...")
-	time.Sleep(2 * time.Second)
+	ticker := time.NewTicker(PollingInterval)
+	defer ticker.Stop()
 
-	cgc.Logger.Info("All pages processed successfully. Shutting down gracefully...")
-	return nil
+	cgc.Logger.Infof("Polling every %v. Press Ctrl+C to stop.", PollingInterval)
+
+	for {
+		select {
+		case <-ctx.Done():
+			cgc.Logger.Info("Shutdown signal received. Stopping CoinGecko crawler...")
+			time.Sleep(2 * time.Second)
+			return nil
+		case <-ticker.C:
+			cgc.Logger.Info("Starting scheduled data fetch...")
+			if err := cgc.fetchAndSend(ctx); err != nil {
+				if err == context.Canceled {
+					cgc.Logger.Info("Fetch cancelled")
+					return nil
+				}
+				cgc.Logger.Errorf("Fetch failed: %v", err)
+			}
+		}
+	}
 }
 
 func (cgc *CoinGeckoCrawler) fetchAndSend(ctx context.Context) error {
@@ -93,6 +112,13 @@ func (cgc *CoinGeckoCrawler) fetchAndSend(ctx context.Context) error {
 	totalSent := 0
 
 	for {
+		select {
+		case <-ctx.Done():
+			cgc.Logger.Info("Context cancelled, stopping fetch...")
+			return ctx.Err()
+		default:
+		}
+
 		tickers, err := cgc.fetchPage(page)
 		if err != nil {
 			return err
@@ -104,18 +130,22 @@ func (cgc *CoinGeckoCrawler) fetchAndSend(ctx context.Context) error {
 
 		cgc.Logger.Infof("Fetched page %d: %d tickers", page, len(tickers))
 
-		// Process and send USD pairs immediately
 		sent := cgc.sendUSDPairs(tickers)
 		totalSent += sent
 		cgc.Logger.Infof("Sent %d USD pairs from page %d to Kafka", sent, page)
 
-		// Check if this is the last page
 		if len(tickers) < 100 {
 			break
 		}
 
 		page++
-		time.Sleep(RateLimit) // Rate limit: 4 requests per minute
+
+		select {
+		case <-ctx.Done():
+			cgc.Logger.Info("Context cancelled during rate limit wait...")
+			return ctx.Err()
+		case <-time.After(RateLimit):
+		}
 	}
 
 	cgc.Logger.Infof("Completed: Total %d USD pairs sent to Kafka", totalSent)
@@ -180,7 +210,6 @@ func (cgc *CoinGeckoCrawler) fetchPage(page int) ([]Ticker, error) {
 			continue
 		}
 
-		// Handle rate limiting (429)
 		if resp.StatusCode == http.StatusTooManyRequests {
 			cgc.Logger.Warnf("Rate limited on page %d, waiting %v before retry...", page, RateLimitBackoff)
 			time.Sleep(RateLimitBackoff)
@@ -188,7 +217,6 @@ func (cgc *CoinGeckoCrawler) fetchPage(page int) ([]Ticker, error) {
 			continue
 		}
 
-		// Handle other errors
 		if resp.StatusCode != http.StatusOK {
 			lastErr = fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
 			time.Sleep(5 * time.Second)
