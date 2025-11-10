@@ -73,8 +73,6 @@ func NewBitpinCrawler() *BitpinCrawler {
 		}
 
 		if messageType.Event == "matches_update" {
-
-		fmt.Printf("BITPIN message: \n %+v \n", messageStr)
 			var matchesUpdate MatchesUpdate
 			err := json.Unmarshal(message, &matchesUpdate)
 			if err != nil {
