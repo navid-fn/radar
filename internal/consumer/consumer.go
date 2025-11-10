@@ -198,12 +198,9 @@ func (c *Consumer) parseMessage(msg kafka.Message) ([]*model.Trade, error) {
 }
 
 func (c *Consumer) transformKafkaDataToTrade(kd crawler.KafkaData) (*model.Trade, error) {
-	eventTime, err := time.Parse(time.RFC3339, kd.Time)
+	eventTime, err := c.parseTime(kd.Time)
 	if err != nil {
-		eventTime, err = time.Parse("2006-01-02T15:04:05", kd.Time)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse time '%s': %w", kd.Time, err)
-		}
+		return nil, fmt.Errorf("failed to parse time '%s': %w", kd.Time, err)
 	}
 
 	tradeID := kd.ID
@@ -224,6 +221,23 @@ func (c *Consumer) transformKafkaDataToTrade(kd crawler.KafkaData) (*model.Trade
 	}
 
 	return trade, nil
+}
+
+func (c *Consumer) parseTime(timeStr string) (time.Time, error) {
+	timeFormats := []string{
+		time.RFC3339,          // "2006-01-02T15:04:05Z07:00"
+		"2006-01-02T15:04:05", // "2025-11-10T11:31:00"
+		"2006-01-02 15:04:05", // "2025-11-10 11:31:00"
+		time.RFC3339Nano,      // "2006-01-02T15:04:05.999999999Z07:00"
+	}
+
+	for _, format := range timeFormats {
+		if t, err := time.Parse(format, timeStr); err == nil {
+			return t, nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("unable to parse time with any known format")
 }
 
 func (c *Consumer) generateTradeID(kd crawler.KafkaData) string {

@@ -28,7 +28,7 @@ type Market struct {
 
 type MessageType struct {
 	Symbol string `json:"symbol"`
-	Event string `json:"event"`
+	Event  string `json:"event"`
 }
 type MatcheData struct {
 	ID       string `json:"id"`
@@ -59,6 +59,7 @@ func NewBitpinCrawler() *BitpinCrawler {
 
 	wsConfig := crawler.DefaultWebSocketConfig(BitpinWSURL)
 	bc.wsWorker = crawler.NewBaseWebSocketWorker(wsConfig, bc.Logger, bc.SendToKafka)
+	bc.wsWorker.SendToKafkaCtx = bc.SendToKafkaWithContext
 
 	bc.wsWorker.OnMessage = func(conn *websocket.Conn, message []byte) ([]byte, error) {
 		messageStr := string(message)
@@ -92,7 +93,7 @@ func NewBitpinCrawler() *BitpinCrawler {
 					Volume:   volume,
 					Price:    price,
 					Quantity: quantity,
-					Symbol: messageType.Symbol,
+					Symbol:   messageType.Symbol,
 					Time:     match_time,
 				}
 				messageToSend = append(messageToSend, data)

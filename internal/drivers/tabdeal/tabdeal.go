@@ -133,6 +133,7 @@ func (tc *TabdealCrawler) fetchTrades(ctx context.Context, symbol string) error 
 			ID:       trade_id,
 			Side:     side,
 			Volume:   volume,
+			Symbol:   symbol,
 			Price:    price,
 			Quantity: quantity,
 			Time:     tradeTime.Format(time.RFC3339),

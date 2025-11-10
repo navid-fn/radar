@@ -35,13 +35,14 @@ func DefaultWebSocketConfig(wsURL string) *WebSocketConfig {
 
 // BaseWebSocketWorker provides common WebSocket functionality
 type BaseWebSocketWorker struct {
-	Config      *WebSocketConfig
-	Logger      *logrus.Logger
-	SendToKafka func([]byte) error
-	OnMessage   func(*websocket.Conn, []byte) ([]byte, error) // Optional message transformation, receives conn and message
-	OnConnect   func(*websocket.Conn) error                   // Optional connection setup
-	OnSubscribe func(*websocket.Conn, []string) error
-	writeMutex  sync.Mutex // Protects all writes (per connection, but shared for safety)
+	Config           *WebSocketConfig
+	Logger           *logrus.Logger
+	SendToKafka      func([]byte) error
+	SendToKafkaCtx   func(context.Context, []byte) error // Context-aware version
+	OnMessage        func(*websocket.Conn, []byte) ([]byte, error) // Optional message transformation, receives conn and message
+	OnConnect        func(*websocket.Conn) error                   // Optional connection setup
+	OnSubscribe      func(*websocket.Conn, []string) error
+	writeMutex       sync.Mutex // Protects all writes (per connection, but shared for safety)
 }
 
 // NewBaseWebSocketWorker creates a new BaseWebSocketWorker
@@ -237,9 +238,20 @@ func (bw *BaseWebSocketWorker) HandleConnection(ctx context.Context, workerID st
 				finalMessage = message
 			}
 
-			if finalMessage != nil && len(finalMessage) > 0 {
-				if err := bw.SendToKafka(finalMessage); err != nil {
-					bw.Logger.Errorf("[%s] Failed to send to Kafka: %v", workerID, err)
+			if len(finalMessage) > 0 {
+				// Use context-aware version if available, otherwise fallback
+				var err error
+				if bw.SendToKafkaCtx != nil {
+					err = bw.SendToKafkaCtx(ctx, finalMessage)
+				} else {
+					err = bw.SendToKafka(finalMessage)
+				}
+				
+				if err != nil {
+					// Only log error if context is not cancelled
+					if ctx.Err() == nil {
+						bw.Logger.Errorf("[%s] Failed to send to Kafka: %v", workerID, err)
+					}
 				}
 			}
 

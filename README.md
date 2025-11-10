@@ -24,6 +24,7 @@ A high-performance system for collecting and storing cryptocurrency trading data
 - **ClickHouse**: `localhost:8123` (HTTP), `localhost:9000` (TCP)
 - **Kafka**: `localhost:9092`
 - **Zookeeper**: `localhost:2181`
+- **Metabase**: `localhost:3000` (Web UI)
 
 ## Configuration
 
@@ -189,3 +190,83 @@ Monitor your system resources and Kafka consumer lag to determine optimal settin
 - Flush when `BATCH_SIZE` is reached (full batch)
 - Flush when `BATCH_TIMEOUT_SECONDS` elapses (partial batch)
 - Flush remaining trades on graceful shutdown
+
+## Metabase - Data Visualization
+
+Metabase is included for easy data visualization and analytics on your trading data.
+
+### Accessing Metabase
+
+1. **Start all services**:
+   ```bash
+   docker-compose up -d
+   ```
+
+2. **Open Metabase** in your browser:
+   ```
+   http://localhost:3000
+   ```
+
+3. **First-time Setup** (only needed once):
+   - Create your admin account
+   - Choose "I'll add my data later" or proceed to add ClickHouse
+   
+### Connecting ClickHouse to Metabase
+
+1. **In Metabase**, go to Settings → Admin → Databases → Add Database
+
+2. **Configure ClickHouse connection**:
+   - **Database type**: Select "ClickHouse"
+   - **Display name**: `Radar Trades`
+   - **Host**: `clickhouse` (use the container name, not localhost)
+   - **Port**: `8123`
+   - **Database name**: `default`
+   - **Username**: `default`
+   - **Password**: `password`
+
+3. **Save** and test the connection
+
+### Sample Queries
+
+Once connected, you can create dashboards with queries like:
+
+**Total Trades by Exchange:**
+```sql
+SELECT source, count(*) as total_trades
+FROM trade
+GROUP BY source
+ORDER BY total_trades DESC
+```
+
+**Trading Volume Over Time:**
+```sql
+SELECT 
+    toStartOfHour(event_time) as hour,
+    source,
+    sum(quote_amount) as volume
+FROM trade
+WHERE event_time >= now() - INTERVAL 24 HOUR
+GROUP BY hour, source
+ORDER BY hour DESC
+```
+
+**Price Analysis by Symbol:**
+```sql
+SELECT 
+    symbol,
+    avg(price) as avg_price,
+    min(price) as min_price,
+    max(price) as max_price,
+    count(*) as trade_count
+FROM trade
+WHERE event_time >= now() - INTERVAL 1 HOUR
+GROUP BY symbol
+ORDER BY trade_count DESC
+LIMIT 10
+```
+
+### Metabase Tips
+
+- **Persistent Data**: Metabase settings and dashboards are stored in the `metabase-data` volume
+- **Reset Metabase**: To start fresh, run `docker-compose down -v` and restart
+- **Custom Port**: Change `METABASE_PORT` in `.env` if port 3000 is already in use

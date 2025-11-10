@@ -60,7 +60,6 @@ type MarketDataAPIResponse struct {
 
 type NobitexCrawler struct {
 	*crawler.BaseCrawler
-	tradeTracker *crawler.TradeTracker
 	httpConfig   *crawler.HTTPConfig
 }
 
@@ -70,7 +69,6 @@ func NewNobitexCrawler() *NobitexCrawler {
 
 	return &NobitexCrawler{
 		BaseCrawler:  baseCrawler,
-		tradeTracker: crawler.NewTradeTracker(),
 	}
 }
 
@@ -191,20 +189,11 @@ func (nc *NobitexCrawler) fetchTrades(ctx context.Context, symbol string) error 
 		return nil
 	}
 
-	totalTrades := len(tradeData.Trades)
-	duplicatesCount := 0
 	sentCount := 0
 
 	for _, t := range tradeData.Trades {
 		t.Symbol = symbol
 		t.Exchange = "nobitex"
-
-		tradeHash := crawler.CreateTradeHash(t.Time, t.Price, t.Volume, t.Side)
-
-		if nc.tradeTracker.IsTradeProcessed(symbol, tradeHash) {
-			duplicatesCount++
-			continue
-		}
 
 		volume, _ := strconv.ParseFloat(t.Volume, 64)
 		price, _ := strconv.ParseFloat(t.Price, 64)
@@ -232,17 +221,7 @@ func (nc *NobitexCrawler) fetchTrades(ctx context.Context, symbol string) error 
 			continue
 		}
 
-		nc.tradeTracker.MarkTradeProcessed(symbol, tradeHash)
 		sentCount++
-	}
-
-	if totalTrades > 0 {
-		if duplicatesCount > 0 {
-			nc.Logger.Infof("[%s] Filtered %d duplicates out of %d trades, sent %d unique trades",
-				symbol, duplicatesCount, totalTrades, sentCount)
-		} else {
-			nc.Logger.Debugf("[%s] Sent %d new trades", symbol, sentCount)
-		}
 	}
 
 	return nil

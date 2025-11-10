@@ -65,6 +65,7 @@ func NewRamzinexCrawler() *RamzinexCrawler {
 
 	wsConfig := crawler.DefaultWebSocketConfig(RamzinexWSUrl)
 	rc.wsWorker = crawler.NewBaseWebSocketWorker(wsConfig, rc.Logger, rc.SendToKafka)
+	rc.wsWorker.SendToKafkaCtx = rc.SendToKafkaWithContext
 
 	rc.wsWorker.OnConnect = func(conn *websocket.Conn) error {
 		connectMsg := map[string]any{

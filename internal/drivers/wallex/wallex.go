@@ -48,6 +48,7 @@ func NewWallexCrawler() *WallexCrawler {
 	wsConfig.HandshakeTimeout = 4 * time.Second
 
 	wc.wsWorker = crawler.NewBaseWebSocketWorker(wsConfig, wc.Logger, wc.SendToKafka)
+	wc.wsWorker.SendToKafkaCtx = wc.SendToKafkaWithContext
 
 	wc.wsWorker.OnSubscribe = func(conn *websocket.Conn, symbols []string) error {
 		wc.Logger.Infof("Subscribing to %d markets for trades...", len(symbols))
@@ -60,40 +61,40 @@ func NewWallexCrawler() *WallexCrawler {
 		wc.Logger.Info("Subscriptions sent")
 		return nil
 	}
-	wc.wsWorker.OnMessage = func(conn *websocket.Conn, message []byte) ([]byte, error)  {
+	wc.wsWorker.OnMessage = func(conn *websocket.Conn, message []byte) ([]byte, error) {
 		messageStr := strings.TrimSpace(string(message))
 		if strings.Contains(messageStr, `"sid":`) {
 			return nil, nil
 		}
-	var rawMessage []any
-	err := json.Unmarshal(message, &rawMessage)
-	if err != nil {
-		return nil, nil
-	}
+		var rawMessage []any
+		err := json.Unmarshal(message, &rawMessage)
+		if err != nil {
+			return nil, nil
+		}
 
-	parts := strings.Split(rawMessage[0].(string), "@")
-	tradeData := rawMessage[1].(map[string]any)
-	symbol := parts[0]
-	side := "buy"
-	if !tradeData["isBuyOrder"].(bool) {
-		side = "sell"
-	}
+		parts := strings.Split(rawMessage[0].(string), "@")
+		tradeData := rawMessage[1].(map[string]any)
+		symbol := parts[0]
+		side := "buy"
+		if !tradeData["isBuyOrder"].(bool) {
+			side = "sell"
+		}
 
-	volume, _ := strconv.ParseFloat(tradeData["quantity"].(string), 64)
-	price, _ := strconv.ParseFloat(tradeData["price"].(string), 64)
-	quantity := price * volume
+		volume, _ := strconv.ParseFloat(tradeData["quantity"].(string), 64)
+		price, _ := strconv.ParseFloat(tradeData["price"].(string), 64)
+		quantity := price * volume
 
-	kafkaData := crawler.KafkaData{
-		Symbol: symbol,
-		Side: side,
-		Exchange: "wallex",
-		Price: price,
-		Volume: volume,
-		Quantity: quantity,
-		Time: tradeData["timestamp"].(string),
-	}
-	kafkaMsgBytes, _ := json.Marshal(kafkaData)
-	return kafkaMsgBytes, nil
+		kafkaData := crawler.KafkaData{
+			Symbol:   symbol,
+			Side:     side,
+			Exchange: "wallex",
+			Price:    price,
+			Volume:   volume,
+			Quantity: quantity,
+			Time:     tradeData["timestamp"].(string),
+		}
+		kafkaMsgBytes, _ := json.Marshal(kafkaData)
+		return kafkaMsgBytes, nil
 	}
 
 	return wc

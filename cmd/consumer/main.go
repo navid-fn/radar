@@ -65,4 +65,3 @@ func main() {
 
 	log.Println("Application stopped successfully")
 }
-

@@ -64,6 +64,23 @@ services:
     networks:
       - dev-network
 
+  metabase:
+    image: metabase/metabase:latest
+    hostname: metabase
+    container_name: metabase
+    depends_on:
+      - clickhouse
+    ports:
+      - "${METABASE_PORT:-3000}:3000"
+    environment:
+      MB_DB_TYPE: h2
+      MB_DB_FILE: /metabase-data/metabase.db
+    volumes:
+      - metabase-data:/metabase-data
+    networks:
+      - dev-network
+    restart: unless-stopped
+
 volumes:
   zookeeper-data:
     driver: local
@@ -74,6 +91,8 @@ volumes:
   clickhouse-data:
     driver: local
   clickhouse-logs:
+    driver: local
+  metabase-data:
     driver: local
 
 networks:

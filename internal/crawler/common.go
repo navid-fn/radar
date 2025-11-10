@@ -113,12 +113,24 @@ func (bc *BaseCrawler) CloseKafkaProducer() {
 }
 
 func (bc *BaseCrawler) SendToKafka(message []byte) error {
+	return bc.SendToKafkaWithContext(context.Background(), message)
+}
+
+func (bc *BaseCrawler) SendToKafkaWithContext(ctx context.Context, message []byte) error {
 	msg := kafka.Message{
 		Value: message,
 	}
 
-	err := bc.KafkaWriter.WriteMessages(context.Background(), msg)
+	// Use context with timeout for graceful shutdown
+	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	err := bc.KafkaWriter.WriteMessages(writeCtx, msg)
 	if err != nil {
+		// Don't log error if context was cancelled (shutdown in progress)
+		if ctx.Err() != nil {
+			return nil
+		}
 		return fmt.Errorf("failed to send message to Kafka: %w", err)
 	}
 
