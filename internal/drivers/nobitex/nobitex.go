@@ -208,7 +208,7 @@ func (nc *NobitexCrawler) fetchTrades(ctx context.Context, symbol string) error 
 
 		volume, _ := strconv.ParseFloat(t.Volume, 64)
 		price, _ := strconv.ParseFloat(t.Price, 64)
-	
+
 		tradeTime := utils.TurnTimeStampToTime(t.Time, false)
 
 		data := crawler.KafkaData{
@@ -255,8 +255,6 @@ func (nc *NobitexCrawler) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize Kafka producer: %w", err)
 	}
 	defer nc.CloseKafkaProducer()
-
-	nc.StartDeliveryReport()
 
 	symbols, err := nc.FetchMarkets()
 	if err != nil {

@@ -4,9 +4,10 @@ import (
 	"context"
 	"sync"
 
-	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
+	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 )
+
 // Base setting of crawlers
 type Config struct {
 	ExchangeName         string
@@ -35,16 +36,11 @@ type HTTPWorker interface {
 }
 
 type BaseCrawler struct {
-	Config        *Config
-	KafkaProducer *kafka.Producer
-	Logger        *logrus.Logger
+	Config      *Config
+	KafkaWriter *kafka.Writer
+	Logger      *logrus.Logger
 }
 
 type Worker interface {
 	Run(ctx context.Context, chunk []string, wg *sync.WaitGroup)
 }
-
-
-
-
-

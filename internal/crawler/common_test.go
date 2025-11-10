@@ -91,8 +91,7 @@ func TestNewBaseCrawler(t *testing.T) {
 		t.Error("Expected Logger to be initialized")
 	}
 
-	if baseCrawler.KafkaProducer != nil {
-		t.Error("Expected KafkaProducer to be nil before initialization")
+	if baseCrawler.KafkaWriter != nil {
+		t.Error("Expected KafkaWriter to be nil before initialization")
 	}
 }
-

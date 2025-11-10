@@ -125,17 +125,17 @@ func (tc *TabdealCrawler) fetchTrades(ctx context.Context, symbol string) error 
 		if t.Buyer {
 			side = "buy"
 		}
-	
+
 		tradeTime := utils.TurnTimeStampToTime(t.Time, false)
 
 		data := crawler.KafkaData{
 			Exchange: "tabdeal",
-			ID: trade_id,
-			Side: side,
-			Volume: volume,
-			Price: price,
+			ID:       trade_id,
+			Side:     side,
+			Volume:   volume,
+			Price:    price,
 			Quantity: quantity,
-			Time: tradeTime.Format(time.RFC3339),
+			Time:     tradeTime.Format(time.RFC3339),
 		}
 
 		jsonData, err := json.Marshal(data)
@@ -152,7 +152,6 @@ func (tc *TabdealCrawler) fetchTrades(ctx context.Context, symbol string) error 
 		tc.idTracker.UpdateLastSeenID(symbol, t.ID)
 		newTradesCount++
 	}
-
 
 	if newTradesCount > 0 {
 		tc.idTracker.DecreaseSleep(symbol, SleepDecrement, MinSleepTime, MinSleepTime)
@@ -172,8 +171,6 @@ func (tc *TabdealCrawler) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize Kafka producer: %w", err)
 	}
 	defer tc.CloseKafkaProducer()
-
-	tc.StartDeliveryReport()
 
 	symbols, err := tc.FetchMarkets()
 	if err != nil {
@@ -207,6 +204,3 @@ func (tc *TabdealCrawler) Run(ctx context.Context) error {
 		}
 	})
 }
-
-
-

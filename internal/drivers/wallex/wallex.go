@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -58,6 +60,41 @@ func NewWallexCrawler() *WallexCrawler {
 		wc.Logger.Info("Subscriptions sent")
 		return nil
 	}
+	wc.wsWorker.OnMessage = func(conn *websocket.Conn, message []byte) ([]byte, error)  {
+		messageStr := strings.TrimSpace(string(message))
+		if strings.Contains(messageStr, `"sid":`) {
+			return nil, nil
+		}
+	var rawMessage []any
+	err := json.Unmarshal(message, &rawMessage)
+	if err != nil {
+		return nil, nil
+	}
+
+	parts := strings.Split(rawMessage[0].(string), "@")
+	tradeData := rawMessage[1].(map[string]any)
+	symbol := parts[0]
+	side := "buy"
+	if !tradeData["isBuyOrder"].(bool) {
+		side = "sell"
+	}
+
+	volume, _ := strconv.ParseFloat(tradeData["quantity"].(string), 64)
+	price, _ := strconv.ParseFloat(tradeData["price"].(string), 64)
+	quantity := price * volume
+
+	kafkaData := crawler.KafkaData{
+		Symbol: symbol,
+		Side: side,
+		Exchange: "wallex",
+		Price: price,
+		Volume: volume,
+		Quantity: quantity,
+		Time: tradeData["timestamp"].(string),
+	}
+	kafkaMsgBytes, _ := json.Marshal(kafkaData)
+	return kafkaMsgBytes, nil
+	}
 
 	return wc
 }
@@ -100,8 +137,6 @@ func (wc *WallexCrawler) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize Kafka producer: %w", err)
 	}
 	defer wc.CloseKafkaProducer()
-
-	wc.StartDeliveryReport()
 
 	markets, err := wc.FetchMarkets()
 	if err != nil {

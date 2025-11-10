@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
+	"github.com/segmentio/kafka-go"
 	"github.com/sirupsen/logrus"
 )
 
@@ -86,47 +86,43 @@ func NewBaseCrawler(config *Config) *BaseCrawler {
 
 // initialize kafka which create a producer
 func (bc *BaseCrawler) InitKafkaProducer() error {
-	config := kafka.ConfigMap{
-		"bootstrap.servers": bc.Config.KafkaBroker,
+	writer := &kafka.Writer{
+		Addr:         kafka.TCP(bc.Config.KafkaBroker),
+		Topic:        bc.Config.KafkaTopic,
+		Balancer:     &kafka.LeastBytes{},
+		BatchSize:    100,
+		BatchTimeout: 10 * time.Millisecond,
+		Async:        false,
+		RequiredAcks: kafka.RequireOne,
+		Compression:  kafka.Snappy,
 	}
 
-	producer, err := kafka.NewProducer(&config)
-	if err != nil {
-		return fmt.Errorf("failed to create Kafka producer: %w", err)
-	}
-
-	bc.KafkaProducer = producer
+	bc.KafkaWriter = writer
 	bc.Logger.Info("Kafka Producer initialized successfully")
 	return nil
 }
 
-// Check Events channel of kafka. if error is occurred, it will send error to our logger
-func (bc *BaseCrawler) StartDeliveryReport() {
-	go func() {
-		for e := range bc.KafkaProducer.Events() {
-			switch ev := e.(type) {
-			case *kafka.Message:
-				if ev.TopicPartition.Error != nil {
-					bc.Logger.Errorf("Message delivery failed: %v", ev.TopicPartition.Error)
-				}
-			}
-		}
-	}()
-}
-
 func (bc *BaseCrawler) CloseKafkaProducer() {
-	if bc.KafkaProducer != nil {
-		bc.KafkaProducer.Close()
-		bc.Logger.Info("Kafka Producer closed")
+	if bc.KafkaWriter != nil {
+		if err := bc.KafkaWriter.Close(); err != nil {
+			bc.Logger.Errorf("Error closing Kafka producer: %v", err)
+		} else {
+			bc.Logger.Info("Kafka Producer closed")
+		}
 	}
 }
 
 func (bc *BaseCrawler) SendToKafka(message []byte) error {
-	topic := bc.Config.KafkaTopic
-	return bc.KafkaProducer.Produce(&kafka.Message{
-		TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
-		Value:          message,
-	}, nil)
+	msg := kafka.Message{
+		Value: message,
+	}
+
+	err := bc.KafkaWriter.WriteMessages(context.Background(), msg)
+	if err != nil {
+		return fmt.Errorf("failed to send message to Kafka: %w", err)
+	}
+
+	return nil
 }
 
 // Turn slice of markets to small chunks
@@ -168,4 +164,3 @@ func RunWithGracefulShutdown(
 
 	return nil
 }
-

@@ -227,8 +227,6 @@ func (rc *RamzinexCrawler) Run(ctx context.Context) error {
 	}
 	defer rc.CloseKafkaProducer()
 
-	rc.StartDeliveryReport()
-
 	pairs, err := rc.FetchMarkets()
 	if err != nil {
 		return fmt.Errorf("could not fetch pairs: %w", err)

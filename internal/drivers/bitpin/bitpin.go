@@ -27,13 +27,14 @@ type Market struct {
 }
 
 type MessageType struct {
+	Symbol string `json:"symbol"`
 	Event string `json:"event"`
 }
 type MatcheData struct {
 	ID       string `json:"id"`
 	Price    string `json:"price"`
 	Volume   string `json:"base_amount"`
-	Quantity string `json:"quate_amount"`
+	Quantity string `json:"quote_amount"`
 	Side     string `json:"side"`
 }
 
@@ -72,6 +73,8 @@ func NewBitpinCrawler() *BitpinCrawler {
 		}
 
 		if messageType.Event == "matches_update" {
+
+		fmt.Printf("BITPIN message: \n %+v \n", messageStr)
 			var matchesUpdate MatchesUpdate
 			err := json.Unmarshal(message, &matchesUpdate)
 			if err != nil {
@@ -91,6 +94,7 @@ func NewBitpinCrawler() *BitpinCrawler {
 					Volume:   volume,
 					Price:    price,
 					Quantity: quantity,
+					Symbol: messageType.Symbol,
 					Time:     match_time,
 				}
 				messageToSend = append(messageToSend, data)
@@ -167,8 +171,6 @@ func (bc *BitpinCrawler) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize Kafka producer: %w", err)
 	}
 	defer bc.CloseKafkaProducer()
-
-	bc.StartDeliveryReport()
 
 	markets, err := bc.FetchMarkets()
 	if err != nil {

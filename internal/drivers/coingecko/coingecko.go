@@ -70,8 +70,6 @@ func (cgc *CoinGeckoCrawler) Run(ctx context.Context) error {
 		cgc.Logger.Info("Kafka producer closed")
 	}()
 
-	cgc.StartDeliveryReport()
-
 	cgc.Logger.Info("Starting initial data fetch...")
 	if err := cgc.fetchAndSend(ctx); err != nil {
 		if err == context.Canceled {
@@ -160,11 +158,11 @@ func (cgc *CoinGeckoCrawler) sendUSDPairs(tickers []Ticker) int {
 			continue
 		}
 		data := crawler.KafkaData{
+			Exchange: "binance",
 			Symbol:   fmt.Sprintf("%s/%s", ticker.Base, "USDT"),
 			Price:    ticker.ConvertedLast.USD,
 			Volume:   ticker.ConvertedVolume.USD,
 			Time:     ticker.LastFetchAt,
-			Exchange: "binance",
 			Quantity: ticker.ConvertedVolume.USD,
 			Side:     "all",
 		}

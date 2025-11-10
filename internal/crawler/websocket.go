@@ -290,8 +290,7 @@ func (bw *BaseWebSocketWorker) SendPong(conn *websocket.Conn) error {
 	return nil
 }
 
-// WriteJSON safely writes JSON message to WebSocket with mutex protection
-func (bw *BaseWebSocketWorker) WriteJSON(conn *websocket.Conn, v interface{}) error {
+func (bw *BaseWebSocketWorker) WriteJSON(conn *websocket.Conn, v any) error {
 	bw.writeMutex.Lock()
 	defer bw.writeMutex.Unlock()
 
@@ -299,7 +298,6 @@ func (bw *BaseWebSocketWorker) WriteJSON(conn *websocket.Conn, v interface{}) er
 	return conn.WriteJSON(v)
 }
 
-// WriteMessage safely writes message to WebSocket with mutex protection
 func (bw *BaseWebSocketWorker) WriteMessage(conn *websocket.Conn, messageType int, data []byte) error {
 	bw.writeMutex.Lock()
 	defer bw.writeMutex.Unlock()
