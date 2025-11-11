@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/navid-fn/radar/internal/crawler"
+	"nobitex/radar/internal/crawler"
 )
 
 const (
@@ -76,13 +76,13 @@ func (cgc *CoinGeckoCrawler) Run(ctx context.Context) error {
 			cgc.Logger.Info("Initial fetch cancelled")
 			return nil
 		}
-		cgc.Logger.Errorf("Initial fetch failed: %v", err)
+		cgc.Logger.Error("Initial fetch failed", "error", err)
 	}
 
 	ticker := time.NewTicker(PollingInterval)
 	defer ticker.Stop()
 
-	cgc.Logger.Infof("Polling every %v. Press Ctrl+C to stop.", PollingInterval)
+	cgc.Logger.Info("Polling started", "interval", PollingInterval)
 
 	for {
 		select {
@@ -97,7 +97,7 @@ func (cgc *CoinGeckoCrawler) Run(ctx context.Context) error {
 					cgc.Logger.Info("Fetch cancelled")
 					return nil
 				}
-				cgc.Logger.Errorf("Fetch failed: %v", err)
+				cgc.Logger.Error("Fetch failed", "error", err)
 			}
 		}
 	}
@@ -126,11 +126,11 @@ func (cgc *CoinGeckoCrawler) fetchAndSend(ctx context.Context) error {
 			break
 		}
 
-		cgc.Logger.Infof("Fetched page %d: %d tickers", page, len(tickers))
+		cgc.Logger.Info("Fetched page", "page", page, "tickers", len(tickers))
 
 		sent := cgc.sendUSDPairs(tickers)
 		totalSent += sent
-		cgc.Logger.Infof("Sent %d USD pairs from page %d to Kafka", sent, page)
+		cgc.Logger.Info("Sent USD pairs to Kafka", "count", sent, "page", page)
 
 		if len(tickers) < 100 {
 			break
@@ -146,7 +146,7 @@ func (cgc *CoinGeckoCrawler) fetchAndSend(ctx context.Context) error {
 		}
 	}
 
-	cgc.Logger.Infof("Completed: Total %d USD pairs sent to Kafka", totalSent)
+	cgc.Logger.Info("Completed sending USD pairs to Kafka", "total", totalSent)
 	return nil
 }
 
@@ -168,12 +168,12 @@ func (cgc *CoinGeckoCrawler) sendUSDPairs(tickers []Ticker) int {
 		}
 		jsonData, err := json.Marshal(data)
 		if err != nil {
-			cgc.Logger.Errorf("Failed to marshal %s: %v", ticker.Base, err)
+			cgc.Logger.Error("Failed to marshal", "ticker", ticker.Base, "error", err)
 			continue
 		}
 
 		if err := cgc.SendToKafka(jsonData); err != nil {
-			cgc.Logger.Errorf("Failed to send %s to Kafka: %v", ticker.Base, err)
+			cgc.Logger.Error("Failed to send to Kafka", "ticker", ticker.Base, "error", err)
 			continue
 		}
 
@@ -189,7 +189,7 @@ func (cgc *CoinGeckoCrawler) fetchPage(page int) ([]Ticker, error) {
 	var lastErr error
 	for attempt := 0; attempt < MaxRetries; attempt++ {
 		if attempt > 0 {
-			cgc.Logger.Warnf("Retry attempt %d/%d for page %d", attempt, MaxRetries, page)
+			cgc.Logger.Warn("Retry attempt", "attempt", attempt, "maxRetries", MaxRetries, "page", page)
 		}
 
 		resp, err := cgc.httpClient.Get(url)
@@ -209,7 +209,7 @@ func (cgc *CoinGeckoCrawler) fetchPage(page int) ([]Ticker, error) {
 		}
 
 		if resp.StatusCode == http.StatusTooManyRequests {
-			cgc.Logger.Warnf("Rate limited on page %d, waiting %v before retry...", page, RateLimitBackoff)
+			cgc.Logger.Warn("Rate limited, waiting before retry", "page", page, "backoff", RateLimitBackoff)
 			time.Sleep(RateLimitBackoff)
 			lastErr = fmt.Errorf("rate limited")
 			continue

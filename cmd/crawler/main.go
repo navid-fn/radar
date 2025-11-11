@@ -10,13 +10,13 @@ import (
     "sync"
     "syscall"
 
-    "github.com/navid-fn/radar/internal/crawler"
-    "github.com/navid-fn/radar/internal/drivers/bitpin"
-    "github.com/navid-fn/radar/internal/drivers/coingecko"
-    "github.com/navid-fn/radar/internal/drivers/nobitex"
-    "github.com/navid-fn/radar/internal/drivers/ramzinex"
-    "github.com/navid-fn/radar/internal/drivers/tabdeal"
-    "github.com/navid-fn/radar/internal/drivers/wallex"
+    "nobitex/radar/internal/crawler"
+    "nobitex/radar/internal/drivers/bitpin"
+    "nobitex/radar/internal/drivers/coingecko"
+    "nobitex/radar/internal/drivers/nobitex"
+    "nobitex/radar/internal/drivers/ramzinex"
+    "nobitex/radar/internal/drivers/tabdeal"
+    "nobitex/radar/internal/drivers/wallex"
 )
 
 func main() {
@@ -73,11 +73,12 @@ func main() {
         case "coingecko":
             crawlers = append(crawlers, coingecko.NewCoinGeckoCrawler())
         default:
-            logger.Fatalf("Unknown exchange: %s", name)
+            logger.Error("Unknown exchange", "name", name)
+            os.Exit(1)
         }
     }
 
-    logger.Infof("Starting crawlers: %s", strings.Join(selected, ", "))
+    logger.Info("Starting crawlers", "exchanges", strings.Join(selected, ", "))
 
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
@@ -92,7 +93,7 @@ func main() {
         wg.Add(1)
         go func(c crawler.Crawler) {
             defer wg.Done()
-            logger.Infof("Initialized %s crawler", c.GetName())
+            logger.Info("Initialized crawler", "name", c.GetName())
             if err := c.Run(ctx); err != nil {
                 errs <- fmt.Errorf("%s failed: %w", c.GetName(), err)
             }
@@ -101,10 +102,10 @@ func main() {
 
     select {
     case sig := <-sigCh:
-        logger.Warnf("Received signal: %v. Shutting down...", sig)
+        logger.Warn("Received signal, shutting down", "signal", sig)
         cancel()
     case err := <-errs:
-        logger.Errorf("A crawler exited with error: %v. Shutting down...", err)
+        logger.Error("A crawler exited with error, shutting down", "error", err)
         cancel()
     }
 

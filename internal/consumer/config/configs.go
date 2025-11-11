@@ -2,7 +2,7 @@ package config
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"time"
@@ -22,9 +22,13 @@ type Config struct {
 }
 
 func Load() *Config {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	
 	err := godotenv.Load()
 	if err != nil {
-		log.Println("No .env file found, using environment variables")
+		logger.Info("No .env file found, using environment variables")
 	}
 
 	dsn := fmt.Sprintf("clickhouse://%s:%s@%s:%s/%s?dial_timeout=10s&read_timeout=20s",
@@ -73,7 +77,10 @@ func getEnvAsInt(key string, defaultValue int) int {
 	}
 	value, err := strconv.Atoi(valueStr)
 	if err != nil {
-		log.Printf("Warning: invalid integer value for %s, using default: %d", key, defaultValue)
+		logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slog.LevelInfo,
+		}))
+		logger.Warn("Invalid integer value, using default", "key", key, "default", defaultValue)
 		return defaultValue
 	}
 	return value

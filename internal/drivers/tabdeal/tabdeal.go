@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/navid-fn/radar/internal/crawler"
-	"github.com/navid-fn/radar/utils"
+	"nobitex/radar/internal/crawler"
+	"nobitex/radar/utils"
 )
 
 const (
@@ -86,7 +86,7 @@ func (tc *TabdealCrawler) FetchMarkets() ([]string, error) {
 		}
 	}
 
-	tc.Logger.Infof("Fetched %d active trading symbols", len(symbols))
+	tc.Logger.Info("Fetched active trading symbols", "count", len(symbols))
 	return symbols, nil
 }
 
@@ -141,12 +141,12 @@ func (tc *TabdealCrawler) fetchTrades(ctx context.Context, symbol string) error 
 
 		jsonData, err := json.Marshal(data)
 		if err != nil {
-			tc.Logger.Errorf("Error marshaling trade: %v", err)
+			tc.Logger.Error("Error marshaling trade", "error", err)
 			continue
 		}
 
 		if err := tc.SendToKafka(jsonData); err != nil {
-			tc.Logger.Errorf("Failed to send to Kafka: %v", err)
+			tc.Logger.Error("Failed to send to Kafka", "error", err)
 			continue
 		}
 
@@ -187,16 +187,16 @@ func (tc *TabdealCrawler) Run(ctx context.Context) error {
 			wg.Add(1)
 			go func(sym string) {
 				defer wg.Done()
-				tc.Logger.Infof("Starting trade fetcher for symbol: %s", sym)
+				tc.Logger.Info("Starting trade fetcher for symbol", "symbol", sym)
 
 				for {
 					select {
 					case <-ctx.Done():
-						tc.Logger.Infof("Stopping trade fetcher for symbol: %s", sym)
+						tc.Logger.Info("Stopping trade fetcher for symbol", "symbol", sym)
 						return
 					default:
 						if err := tc.fetchTrades(ctx, sym); err != nil {
-							tc.Logger.Errorf("Error fetching trades for %s: %v", sym, err)
+							tc.Logger.Error("Error fetching trades", "symbol", sym, "error", err)
 							time.Sleep(2 * time.Second)
 						}
 					}

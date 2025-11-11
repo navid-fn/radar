@@ -6,14 +6,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
-	"github.com/navid-fn/radar/internal/consumer/config"
-	"github.com/navid-fn/radar/internal/crawler"
-	"github.com/navid-fn/radar/internal/model"
-	"github.com/navid-fn/radar/internal/repository"
+	"nobitex/radar/internal/consumer/config"
+	"nobitex/radar/internal/crawler"
+	"nobitex/radar/internal/model"
+	"nobitex/radar/internal/repository"
 	"github.com/segmentio/kafka-go"
 )
 
@@ -24,10 +24,11 @@ type Consumer struct {
 	batchSize    int
 	batchTimeout time.Duration
 	messagesChan chan kafka.Message
+	logger       *slog.Logger
 	wg           sync.WaitGroup
 }
 
-func NewConsumer(cfg *config.Config, repo repository.TradeRepository) *Consumer {
+func NewConsumer(cfg *config.Config, repo repository.TradeRepository, logger *slog.Logger) *Consumer {
 	reader := kafka.NewReader(cfg.KafkaConfig)
 
 	return &Consumer{
@@ -37,13 +38,17 @@ func NewConsumer(cfg *config.Config, repo repository.TradeRepository) *Consumer 
 		batchSize:    cfg.BatchSize,
 		batchTimeout: time.Duration(cfg.BatchTimeoutSeconds) * time.Second,
 		messagesChan: make(chan kafka.Message, cfg.WorkerCount*2),
+		logger:       logger,
 	}
 }
 
 func (c *Consumer) Start(ctx context.Context) error {
-	log.Printf("Starting Kafka consumer with %d workers\n", c.workerCount)
-	log.Printf("Topic: %s, GroupID: %s\n", c.reader.Config().Topic, c.reader.Config().GroupID)
-	log.Printf("Batch size: %d, Batch timeout: %v\n", c.batchSize, c.batchTimeout)
+	c.logger.Info("Starting Kafka consumer",
+		"workers", c.workerCount,
+		"topic", c.reader.Config().Topic,
+		"groupID", c.reader.Config().GroupID,
+		"batchSize", c.batchSize,
+		"batchTimeout", c.batchTimeout)
 
 	// Start worker pool
 	for i := 0; i < c.workerCount; i++ {
@@ -54,18 +59,18 @@ func (c *Consumer) Start(ctx context.Context) error {
 	go c.readMessages(ctx)
 
 	<-ctx.Done()
-	log.Println("Shutting down consumer...")
+	c.logger.Info("Shutting down consumer...")
 
 	close(c.messagesChan)
 
 	c.wg.Wait()
 
 	if err := c.reader.Close(); err != nil {
-		log.Printf("Error closing reader: %v\n", err)
+		c.logger.Error("Error closing reader", "error", err)
 		return err
 	}
 
-	log.Println("Kafka consumer shut down cleanly.")
+	c.logger.Info("Kafka consumer shut down cleanly")
 	return nil
 }
 
@@ -80,7 +85,7 @@ func (c *Consumer) readMessages(ctx context.Context) {
 				if ctx.Err() != nil {
 					return
 				}
-				log.Printf("Error fetching message: %v\n", err)
+				c.logger.Error("Error fetching message", "error", err)
 				continue
 			}
 
@@ -96,8 +101,10 @@ func (c *Consumer) readMessages(ctx context.Context) {
 func (c *Consumer) worker(ctx context.Context, workerID int) {
 	defer c.wg.Done()
 
-	log.Printf("Worker %d started with batch size: %d, timeout: %v\n",
-		workerID, c.batchSize, c.batchTimeout)
+	c.logger.Info("Worker started",
+		"workerID", workerID,
+		"batchSize", c.batchSize,
+		"timeout", c.batchTimeout)
 
 	batch := make([]*model.Trade, 0, c.batchSize)
 	messagesToCommit := make([]kafka.Message, 0, c.batchSize)
@@ -110,14 +117,17 @@ func (c *Consumer) worker(ctx context.Context, workerID int) {
 		}
 
 		if err := c.repo.CreateTrades(batch); err != nil {
-			log.Printf("Worker %d: Error creating batch of %d trades: %v\n",
-				workerID, len(batch), err)
+			c.logger.Error("Error creating batch",
+				"workerID", workerID,
+				"batchSize", len(batch),
+				"error", err)
 		} else {
 			if err := c.reader.CommitMessages(ctx, messagesToCommit...); err != nil {
-				log.Printf("Worker %d: Error committing messages: %v\n", workerID, err)
+				c.logger.Error("Error committing messages", "workerID", workerID, "error", err)
 			} else {
-				log.Printf("Worker %d: Successfully inserted batch of %d trades\n",
-					workerID, len(batch))
+				c.logger.Info("Successfully inserted batch",
+					"workerID", workerID,
+					"batchSize", len(batch))
 			}
 		}
 
@@ -131,14 +141,16 @@ func (c *Consumer) worker(ctx context.Context, workerID int) {
 		case msg, ok := <-c.messagesChan:
 			if !ok {
 				flushBatch()
-				log.Printf("Worker %d stopped\n", workerID)
+				c.logger.Info("Worker stopped", "workerID", workerID)
 				return
 			}
 
 			trades, err := c.parseMessage(msg)
 			if err != nil {
-				log.Printf("Worker %d: Error parsing message at offset %d: %v\n",
-					workerID, msg.Offset, err)
+				c.logger.Error("Error parsing message",
+					"workerID", workerID,
+					"offset", msg.Offset,
+					"error", err)
 				continue
 			}
 
@@ -151,14 +163,15 @@ func (c *Consumer) worker(ctx context.Context, workerID int) {
 
 		case <-ticker.C:
 			if len(batch) > 0 {
-				log.Printf("Worker %d: Flushing partial batch of %d trades due to timeout\n",
-					workerID, len(batch))
+				c.logger.Info("Flushing partial batch due to timeout",
+					"workerID", workerID,
+					"batchSize", len(batch))
 				flushBatch()
 			}
 
 		case <-ctx.Done():
 			flushBatch()
-			log.Printf("Worker %d stopped\n", workerID)
+			c.logger.Info("Worker stopped", "workerID", workerID)
 			return
 		}
 	}
@@ -172,7 +185,7 @@ func (c *Consumer) parseMessage(msg kafka.Message) ([]*model.Trade, error) {
 		for _, kd := range kafkaDataArray {
 			trade, err := c.transformKafkaDataToTrade(kd)
 			if err != nil {
-				log.Printf("Error transforming KafkaData to Trade: %v, data: %+v\n", err, kd)
+				c.logger.Error("Error transforming KafkaData to Trade", "error", err, "data", kd)
 				continue
 			}
 			trades = append(trades, trade)

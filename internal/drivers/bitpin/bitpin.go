@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/navid-fn/radar/internal/crawler"
+	"nobitex/radar/internal/crawler"
 )
 
 const (
@@ -118,7 +118,7 @@ func NewBitpinCrawler() *BitpinCrawler {
 			return fmt.Errorf("failed to send subscription message: %w", err)
 		}
 
-		bc.Logger.Infof("Subscribed to %d symbols", len(symbols))
+		bc.Logger.Info("Subscribed to symbols", "count", len(symbols))
 		return nil
 	}
 
@@ -160,7 +160,7 @@ func (bc *BitpinCrawler) FetchMarkets() ([]string, error) {
 
 	sort.Strings(markets)
 
-	bc.Logger.Infof("Fetched %d unique markets from Bitpin API", len(markets))
+	bc.Logger.Info("Fetched unique markets from Bitpin API", "count", len(markets))
 	return markets, nil
 }
 
@@ -182,8 +182,10 @@ func (bc *BitpinCrawler) Run(ctx context.Context) error {
 	}
 
 	marketChunks := crawler.ChunkMarkets(markets, bc.Config.MaxSubsPerConnection)
-	bc.Logger.Infof("Divided %d markets into %d chunks of ~%d",
-		len(markets), len(marketChunks), bc.Config.MaxSubsPerConnection)
+	bc.Logger.Info("Divided markets into chunks",
+		"total", len(markets),
+		"chunks", len(marketChunks),
+		"chunkSize", bc.Config.MaxSubsPerConnection)
 
 	return crawler.RunWithGracefulShutdown(bc.Logger, func(ctx context.Context, wg *sync.WaitGroup) {
 		for i, chunk := range marketChunks {

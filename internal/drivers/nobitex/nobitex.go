@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/navid-fn/radar/internal/crawler"
-	"github.com/navid-fn/radar/utils"
+	"nobitex/radar/internal/crawler"
+	"nobitex/radar/utils"
 	"golang.org/x/time/rate"
 )
 
@@ -106,7 +106,7 @@ func (nc *NobitexCrawler) FetchMarkets() ([]string, error) {
 		}
 	}
 
-	nc.Logger.Infof("Fetched %d symbols from Nobitex", len(symbols))
+	nc.Logger.Info("Fetched symbols from Nobitex", "count", len(symbols))
 	return symbols, nil
 }
 
@@ -137,23 +137,30 @@ func (nc *NobitexCrawler) setupRateLimiter(symbolCount int) {
 
 	separator := "=" + strings.Repeat("=", 70)
 	nc.Logger.Info(separator)
-	nc.Logger.Info("Dynamic Rate Limit Configuration:")
-	nc.Logger.Infof("  - Total symbols: %d", symbolCount)
-	nc.Logger.Infof("  - Calculated rate: %.2f requests/second (%.1f/minute)", optimalRate, requestsPerMinute)
-	nc.Logger.Infof("  - API limit: %d requests/minute (using %.0f%% = %.1f/min)",
-		APIRateLimitPerMinute, SafetyMargin*100, (APIRateLimitPerMinute * SafetyMargin))
-	nc.Logger.Infof("  - Each symbol polled every: ~%.1f seconds (%.2f minutes)", actualPollingInterval, actualPollingInterval/60)
+	nc.Logger.Info("Dynamic Rate Limit Configuration")
+	nc.Logger.Info("  - Total symbols", "count", symbolCount)
+	nc.Logger.Info("  - Calculated rate",
+		"requestsPerSecond", fmt.Sprintf("%.2f", optimalRate),
+		"requestsPerMinute", fmt.Sprintf("%.1f", requestsPerMinute))
+	nc.Logger.Info("  - API limit",
+		"requestsPerMinute", APIRateLimitPerMinute,
+		"safetyMargin", fmt.Sprintf("%.0f%%", SafetyMargin*100),
+		"effectiveLimit", fmt.Sprintf("%.1f", APIRateLimitPerMinute*SafetyMargin))
+	nc.Logger.Info("  - Polling interval",
+		"seconds", fmt.Sprintf("%.1f", actualPollingInterval),
+		"minutes", fmt.Sprintf("%.2f", actualPollingInterval/60))
 
 	instancesFor1Sec := int(float64(symbolCount) / (APIRateLimitPerMinute * SafetyMargin / 60))
 
 	if actualPollingInterval > 60 {
-		nc.Logger.Warn("")
-		nc.Logger.Warnf("⚠️  PERFORMANCE WARNING: Polling interval is %.1f minutes per symbol!", actualPollingInterval/60)
-		nc.Logger.Warnf("📋 Need ~%d instances for 1-second polling", instancesFor1Sec)
+		nc.Logger.Warn("PERFORMANCE WARNING: Long polling interval",
+			"intervalMinutes", fmt.Sprintf("%.1f", actualPollingInterval/60),
+			"instancesNeeded", instancesFor1Sec)
 	} else if actualPollingInterval > 10 {
-		nc.Logger.Warnf("⚠️  Polling interval: %.1f seconds per symbol", actualPollingInterval)
+		nc.Logger.Warn("Polling interval",
+			"seconds", fmt.Sprintf("%.1f", actualPollingInterval))
 	} else {
-		nc.Logger.Infof("✅ Polling rate is acceptable for %d symbols", symbolCount)
+		nc.Logger.Info("Polling rate is acceptable", "symbols", symbolCount)
 	}
 
 	nc.Logger.Info(separator)
@@ -166,26 +173,26 @@ func (nc *NobitexCrawler) fetchTrades(ctx context.Context, symbol string) error 
 
 	resp, err := http.Get(fmt.Sprintf("%s%s", LatestTradeAPI, symbol))
 	if err != nil {
-		nc.Logger.Errorf("Error calling API for %s: %v", symbol, err)
+		nc.Logger.Error("Error calling API", "symbol", symbol, "error", err)
 		time.Sleep(2 * time.Second)
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		nc.Logger.Errorf("API returned status %d for %s", resp.StatusCode, symbol)
+		nc.Logger.Error("API returned error status", "symbol", symbol, "status", resp.StatusCode)
 		time.Sleep(2 * time.Second)
 		return fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
 
 	var tradeData TradeAPIResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tradeData); err != nil {
-		nc.Logger.Errorf("Error decoding API response for %s: %v", symbol, err)
+		nc.Logger.Error("Error decoding API response", "symbol", symbol, "error", err)
 		return err
 	}
 
 	if tradeData.Status != "ok" {
-		nc.Logger.Warnf("API returned non-ok status for %s: %s", symbol, tradeData.Status)
+		nc.Logger.Warn("API returned non-ok status", "symbol", symbol, "status", tradeData.Status)
 		return nil
 	}
 
@@ -212,12 +219,12 @@ func (nc *NobitexCrawler) fetchTrades(ctx context.Context, symbol string) error 
 
 		jsonData, err := json.Marshal(data)
 		if err != nil {
-			nc.Logger.Errorf("Error marshaling trade for %s: %v", symbol, err)
+			nc.Logger.Error("Error marshaling trade", "symbol", symbol, "error", err)
 			continue
 		}
 
 		if err := nc.SendToKafka(jsonData); err != nil {
-			nc.Logger.Errorf("Failed to send to Kafka for %s: %v", symbol, err)
+			nc.Logger.Error("Failed to send to Kafka", "symbol", symbol, "error", err)
 			continue
 		}
 
@@ -254,7 +261,7 @@ func (nc *NobitexCrawler) Run(ctx context.Context) error {
 				for {
 					select {
 					case <-ctx.Done():
-						nc.Logger.Infof("Stopping trade fetcher for symbol: %s", sym)
+						nc.Logger.Info("Stopping trade fetcher for symbol", "symbol", sym)
 						return
 					default:
 						if err := nc.fetchTrades(ctx, sym); err != nil {

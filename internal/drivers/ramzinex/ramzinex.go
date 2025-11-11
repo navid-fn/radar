@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/navid-fn/radar/internal/crawler"
+	"nobitex/radar/internal/crawler"
 )
 
 const (
@@ -87,7 +87,7 @@ func NewRamzinexCrawler() *RamzinexCrawler {
 
 		if messageStr == "{}" || messageStr == "{}\n" || messageStr == "{}\r\n" {
 			if err := rc.wsWorker.SendPong(conn); err != nil {
-				rc.Logger.Errorf("Failed to send pong: %v", err)
+				rc.Logger.Error("Failed to send pong", "error", err)
 			}
 			return nil, nil
 		}
@@ -95,7 +95,7 @@ func NewRamzinexCrawler() *RamzinexCrawler {
 		var emptyCheck map[string]any
 		if err := json.Unmarshal(message, &emptyCheck); err == nil && len(emptyCheck) == 0 {
 			if err := rc.wsWorker.SendPong(conn); err != nil {
-				rc.Logger.Errorf("Failed to send pong: %v", err)
+				rc.Logger.Error("Failed to send pong", "error", err)
 			}
 			return nil, nil
 		}
@@ -103,7 +103,7 @@ func NewRamzinexCrawler() *RamzinexCrawler {
 		var msgCheck map[string]any
 		if err := json.Unmarshal(message, &msgCheck); err == nil {
 			if errMsg, hasError := msgCheck["error"]; hasError {
-				rc.Logger.Warnf("Received error from server: %v", errMsg)
+				rc.Logger.Warn("Received error from server", "error", errMsg)
 				return nil, nil
 			}
 
@@ -204,7 +204,7 @@ func (rc *RamzinexCrawler) FetchMarkets() ([]PairDetail, error) {
 		rc.pairIDToName[pd.ID] = pd.Name.En
 	}
 
-	rc.Logger.Infof("Fetched %d pairs from Ramzinex API", len(pairs))
+	rc.Logger.Info("Fetched pairs from Ramzinex API", "count", len(pairs))
 	return pairs, nil
 }
 
@@ -238,8 +238,10 @@ func (rc *RamzinexCrawler) Run(ctx context.Context) error {
 	}
 
 	pairChunks := chunkPairs(pairs, rc.Config.MaxSubsPerConnection)
-	rc.Logger.Infof("Divided %d pairs into %d chunks of ~%d",
-		len(pairs), len(pairChunks), rc.Config.MaxSubsPerConnection)
+	rc.Logger.Info("Divided pairs into chunks",
+		"total", len(pairs),
+		"chunks", len(pairChunks),
+		"chunkSize", rc.Config.MaxSubsPerConnection)
 
 	return crawler.RunWithGracefulShutdown(rc.Logger, func(ctx context.Context, wg *sync.WaitGroup) {
 		for i, chunk := range pairChunks {
@@ -262,7 +264,7 @@ func (rc *RamzinexCrawler) Run(ctx context.Context) error {
 					time.Sleep(200 * time.Millisecond)
 					subscriptionID++
 				}
-				rc.Logger.Infof("Successfully subscribed to %d channels", len(chunk))
+				rc.Logger.Info("Successfully subscribed to channels", "count", len(chunk))
 				return nil
 			}
 

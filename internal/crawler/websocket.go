@@ -6,9 +6,9 @@ import (
 	"net/url"
 	"sync"
 	"time"
+	"log/slog"
 
 	"github.com/gorilla/websocket"
-	"github.com/sirupsen/logrus"
 )
 
 // WebSocketConfig holds WebSocket-specific configuration
@@ -36,7 +36,7 @@ func DefaultWebSocketConfig(wsURL string) *WebSocketConfig {
 // BaseWebSocketWorker provides common WebSocket functionality
 type BaseWebSocketWorker struct {
 	Config           *WebSocketConfig
-	Logger           *logrus.Logger
+	Logger           *slog.Logger
 	SendToKafka      func([]byte) error
 	SendToKafkaCtx   func(context.Context, []byte) error // Context-aware version
 	OnMessage        func(*websocket.Conn, []byte) ([]byte, error) // Optional message transformation, receives conn and message
@@ -46,7 +46,7 @@ type BaseWebSocketWorker struct {
 }
 
 // NewBaseWebSocketWorker creates a new BaseWebSocketWorker
-func NewBaseWebSocketWorker(config *WebSocketConfig, logger *logrus.Logger, sendToKafka func([]byte) error) *BaseWebSocketWorker {
+func NewBaseWebSocketWorker(config *WebSocketConfig, logger *slog.Logger, sendToKafka func([]byte) error) *BaseWebSocketWorker {
 	return &BaseWebSocketWorker{
 		Config:      config,
 		Logger:      logger,
@@ -64,7 +64,7 @@ func (bw *BaseWebSocketWorker) RunWorker(
 	defer wg.Done()
 
 	workerID := fmt.Sprintf("%s-%s", workerPrefix, symbolsChunk[0])
-	bw.Logger.Infof("[%s] Starting for %d symbols", workerID, len(symbolsChunk))
+	bw.Logger.Info("Starting WebSocket worker", "workerID", workerID, "symbols", len(symbolsChunk))
 
 	reconnectDelay := InitialReconnectDelay
 	consecutiveErrors := 0
@@ -72,13 +72,17 @@ func (bw *BaseWebSocketWorker) RunWorker(
 	for {
 		select {
 		case <-ctx.Done():
-			bw.Logger.Infof("[%s] Shutting down due to context cancellation", workerID)
+			bw.Logger.Info("Shutting down due to context cancellation", "workerID", workerID)
 			return
 		default:
 			if err := bw.HandleConnection(ctx, workerID, symbolsChunk); err != nil {
 				consecutiveErrors++
-				bw.Logger.Errorf("[%s] WebSocket error (%d/%d): %v. Reconnecting in %v...",
-					workerID, consecutiveErrors, MaxConsecutiveErrors, err, reconnectDelay)
+				bw.Logger.Error("WebSocket error, reconnecting",
+					"workerID", workerID,
+					"consecutiveErrors", consecutiveErrors,
+					"maxErrors", MaxConsecutiveErrors,
+					"error", err,
+					"reconnectDelay", reconnectDelay)
 
 				// Exponential backoff with max limit
 				if reconnectDelay < MaxReconnectDelay {
@@ -90,7 +94,7 @@ func (bw *BaseWebSocketWorker) RunWorker(
 
 				// If too many consecutive errors, wait longer
 				if consecutiveErrors >= MaxConsecutiveErrors {
-					bw.Logger.Warnf("[%s] Too many consecutive errors, extending delay", workerID)
+					bw.Logger.Warn("Too many consecutive errors, extending delay", "workerID", workerID)
 					reconnectDelay = MaxReconnectDelay
 				}
 
@@ -126,7 +130,7 @@ func (bw *BaseWebSocketWorker) HandleConnection(ctx context.Context, workerID st
 	}
 	defer conn.Close()
 
-	bw.Logger.Infof("[%s] Connected to WebSocket", workerID)
+	bw.Logger.Info("Connected to WebSocket", "workerID", workerID)
 
 	// Create context for this connection
 	connCtx, connCancel := context.WithCancel(ctx)
@@ -157,7 +161,7 @@ func (bw *BaseWebSocketWorker) HandleConnection(ctx context.Context, workerID st
 		defer bw.writeMutex.Unlock()
 		err := conn.WriteControl(websocket.PongMessage, []byte(message), time.Now().Add(bw.Config.WriteTimeout))
 		if err != nil {
-			bw.Logger.Errorf("[%s] Failed to send pong: %v", workerID, err)
+			bw.Logger.Error("Failed to send pong", "workerID", workerID, "error", err)
 		}
 		return err
 	})
@@ -209,7 +213,7 @@ func (bw *BaseWebSocketWorker) HandleConnection(ctx context.Context, workerID st
 	for {
 		select {
 		case <-ctx.Done():
-			bw.Logger.Infof("[%s] Context cancelled, closing connection", workerID)
+			bw.Logger.Info("Context cancelled, closing connection", "workerID", workerID)
 			return nil
 
 		case err := <-readErrors:
@@ -226,7 +230,7 @@ func (bw *BaseWebSocketWorker) HandleConnection(ctx context.Context, workerID st
 			if bw.OnMessage != nil {
 				transformed, err := bw.OnMessage(conn, message)
 				if err != nil {
-					bw.Logger.Errorf("[%s] Failed to transform message: %v", workerID, err)
+					bw.Logger.Error("Failed to transform message", "workerID", workerID, "error", err)
 					continue
 				}
 				if transformed == nil {
@@ -250,7 +254,7 @@ func (bw *BaseWebSocketWorker) HandleConnection(ctx context.Context, workerID st
 				if err != nil {
 					// Only log error if context is not cancelled
 					if ctx.Err() == nil {
-						bw.Logger.Errorf("[%s] Failed to send to Kafka: %v", workerID, err)
+						bw.Logger.Error("Failed to send to Kafka", "workerID", workerID, "error", err)
 					}
 				}
 			}
@@ -270,7 +274,7 @@ func (bw *BaseWebSocketWorker) HandleConnection(ctx context.Context, workerID st
 				case <-pongReceived:
 					// Pong received
 				case <-time.After(bw.Config.PongTimeout):
-					bw.Logger.Warnf("[%s] Pong timeout, connection may be unhealthy", workerID)
+					bw.Logger.Warn("Pong timeout, connection may be unhealthy", "workerID", workerID)
 				case <-connCtx.Done():
 					return
 				}

@@ -1,8 +1,8 @@
 package service
 
 import (
-	"github.com/navid-fn/radar/internal/model"
-	"github.com/navid-fn/radar/internal/repository"
+	"nobitex/radar/internal/model"
+	"nobitex/radar/internal/repository"
 )
 
 type TradesService struct {

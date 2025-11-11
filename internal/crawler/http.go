@@ -4,10 +4,10 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"golang.org/x/time/rate"
 )
 
@@ -29,11 +29,11 @@ func DefaultHTTPConfig(baseURL string, requestsPerSecond float64) *HTTPConfig {
 
 type BaseHTTPWorker struct {
 	Config      *HTTPConfig
-	Logger      *logrus.Logger
+	Logger      *slog.Logger
 	SendToKafka func([]byte) error
 }
 
-func NewBaseHTTPWorker(config *HTTPConfig, logger *logrus.Logger, sendToKafka func([]byte) error) *BaseHTTPWorker {
+func NewBaseHTTPWorker(config *HTTPConfig, logger *slog.Logger, sendToKafka func([]byte) error) *BaseHTTPWorker {
 	return &BaseHTTPWorker{
 		Config:      config,
 		Logger:      logger,
@@ -49,20 +49,20 @@ func (hw *BaseHTTPWorker) RunWorker(
 ) {
 	defer wg.Done()
 
-	hw.Logger.Infof("Starting HTTP worker for symbol: %s", symbol)
+	hw.Logger.Info("Starting HTTP worker for symbol", "symbol", symbol)
 
 	for {
 		select {
 		case <-ctx.Done():
-			hw.Logger.Infof("Stopping HTTP worker for symbol: %s", symbol)
+			hw.Logger.Info("Stopping HTTP worker for symbol", "symbol", symbol)
 			return
 		default:
 			if err := hw.Config.RateLimiter.Wait(ctx); err != nil {
-				hw.Logger.Errorf("Rate limiter error for %s: %v", symbol, err)
+				hw.Logger.Error("Rate limiter error", "symbol", symbol, "error", err)
 				return
 			}
 			if err := fetchFunc(ctx, symbol); err != nil {
-				hw.Logger.Errorf("Error fetching data for %s: %v", symbol, err)
+				hw.Logger.Error("Error fetching data", "symbol", symbol, "error", err)
 				time.Sleep(2 * time.Second)
 				continue
 			}

@@ -1,4 +1,4 @@
-module github.com/navid-fn/radar
+module nobitex/radar
 
 go 1.24.0
 
@@ -7,7 +7,6 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/segmentio/kafka-go v0.4.47
-	github.com/sirupsen/logrus v1.9.3
 	golang.org/x/time v0.14.0
 	gorm.io/driver/clickhouse v0.7.0
 	gorm.io/gorm v1.31.1

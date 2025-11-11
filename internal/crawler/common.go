@@ -3,6 +3,7 @@ package crawler
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"sync"
@@ -10,7 +11,6 @@ import (
 	"time"
 
 	"github.com/segmentio/kafka-go"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -33,12 +33,10 @@ const (
 	HealthCheckInterval  = 5 * time.Second
 )
 
-func NewLogger() *logrus.Logger {
-	logger := logrus.New()
-	logger.SetLevel(logrus.InfoLevel)
-	logger.SetFormatter(&logrus.TextFormatter{
-		FullTimestamp: true,
-	})
+func NewLogger() *slog.Logger {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
 	return logger
 }
 
@@ -105,7 +103,7 @@ func (bc *BaseCrawler) InitKafkaProducer() error {
 func (bc *BaseCrawler) CloseKafkaProducer() {
 	if bc.KafkaWriter != nil {
 		if err := bc.KafkaWriter.Close(); err != nil {
-			bc.Logger.Errorf("Error closing Kafka producer: %v", err)
+			bc.Logger.Error("Error closing Kafka producer", "error", err)
 		} else {
 			bc.Logger.Info("Kafka Producer closed")
 		}
@@ -152,7 +150,7 @@ func ChunkMarkets(markets []string, chunkSize int) [][]string {
 }
 
 func RunWithGracefulShutdown(
-	logger *logrus.Logger,
+	logger *slog.Logger,
 	startWorkers func(ctx context.Context, wg *sync.WaitGroup),
 ) error {
 	ctx, cancel := context.WithCancel(context.Background())

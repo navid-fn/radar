@@ -2,10 +2,10 @@ package crawler
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 
 	"github.com/segmentio/kafka-go"
-	"github.com/sirupsen/logrus"
 )
 
 // Base setting of crawlers
@@ -13,7 +13,7 @@ type Config struct {
 	ExchangeName         string
 	KafkaBroker          string
 	KafkaTopic           string
-	Logger               *logrus.Logger
+	Logger               *slog.Logger
 	MaxSubsPerConnection int
 }
 
@@ -38,7 +38,7 @@ type HTTPWorker interface {
 type BaseCrawler struct {
 	Config      *Config
 	KafkaWriter *kafka.Writer
-	Logger      *logrus.Logger
+	Logger      *slog.Logger
 }
 
 type Worker interface {

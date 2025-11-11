@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"github.com/navid-fn/radar/internal/model"
+	"nobitex/radar/internal/model"
 	"gorm.io/gorm"
 )
 

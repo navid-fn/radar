@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/navid-fn/radar/internal/crawler"
+	"nobitex/radar/internal/crawler"
 )
 
 const (
@@ -51,7 +51,7 @@ func NewWallexCrawler() *WallexCrawler {
 	wc.wsWorker.SendToKafkaCtx = wc.SendToKafkaWithContext
 
 	wc.wsWorker.OnSubscribe = func(conn *websocket.Conn, symbols []string) error {
-		wc.Logger.Infof("Subscribing to %d markets for trades...", len(symbols))
+		wc.Logger.Info("Subscribing to markets for trades", "count", len(symbols))
 		for _, symbol := range symbols {
 			subscriptionMsg := []any{"subscribe", map[string]string{"channel": fmt.Sprintf("%s@trade", symbol)}}
 			if err := wc.wsWorker.WriteJSON(conn, subscriptionMsg); err != nil {
@@ -127,7 +127,7 @@ func (wc *WallexCrawler) FetchMarkets() ([]string, error) {
 
 	sort.Strings(markets)
 
-	wc.Logger.Infof("Fetched %d unique markets from Wallex API", len(markets))
+	wc.Logger.Info("Fetched unique markets from Wallex API", "count", len(markets))
 	return markets, nil
 }
 
@@ -149,8 +149,10 @@ func (wc *WallexCrawler) Run(ctx context.Context) error {
 	}
 
 	marketChunks := crawler.ChunkMarkets(markets, wc.Config.MaxSubsPerConnection)
-	wc.Logger.Infof("Divided %d markets into %d chunks of ~%d",
-		len(markets), len(marketChunks), wc.Config.MaxSubsPerConnection)
+	wc.Logger.Info("Divided markets into chunks",
+		"total", len(markets),
+		"chunks", len(marketChunks),
+		"chunkSize", wc.Config.MaxSubsPerConnection)
 
 	return crawler.RunWithGracefulShutdown(wc.Logger, func(ctx context.Context, wg *sync.WaitGroup) {
 		for _, chunk := range marketChunks {

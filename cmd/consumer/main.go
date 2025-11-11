@@ -3,24 +3,30 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/navid-fn/radar/internal/consumer"
-	"github.com/navid-fn/radar/internal/consumer/config"
-	"github.com/navid-fn/radar/internal/repository"
+	"nobitex/radar/internal/consumer"
+	"nobitex/radar/internal/consumer/config"
+	"nobitex/radar/internal/repository"
+
 	"github.com/pressly/goose/v3"
 	"gorm.io/driver/clickhouse"
 	"gorm.io/gorm"
 )
 
 func main() {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+
 	cfg := config.Load()
 	db, err := gorm.Open(clickhouse.Open(cfg.ClickHouseDSN), &gorm.Config{})
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		logger.Error("Failed to connect to database", "error", err)
+		os.Exit(1)
 	}
 
 	migrateFlag := flag.Bool("migrate", false, "Run database migrations and exit")
@@ -29,22 +35,25 @@ func main() {
 	if *migrateFlag {
 		sqlDB, err := db.DB()
 		if err != nil {
-			log.Fatalf("Failed to get sql.DB: %v", err)
+			logger.Error("Failed to get sql.DB", "error", err)
+			os.Exit(1)
 		}
 		if err := goose.SetDialect("clickhouse"); err != nil {
-			log.Fatalf("Goose: failed to set dialect: %v", err)
+			logger.Error("Goose: failed to set dialect", "error", err)
+			os.Exit(1)
 		}
-		log.Println("Running database migrations...")
+		logger.Info("Running database migrations...")
 		if err := goose.Up(sqlDB, "internal/migrations"); err != nil {
-			log.Fatalf("Goose migration failed: %v", err)
+			logger.Error("Goose migration failed", "error", err)
+			os.Exit(1)
 		}
-		log.Println("Migrations completed successfully")
+		logger.Info("Migrations completed successfully")
 		return
 	}
 
 	tradeRepo := repository.NewGormTradeRepository(db)
 
-	kafkaConsumer := consumer.NewConsumer(cfg, tradeRepo)
+	kafkaConsumer := consumer.NewConsumer(cfg, tradeRepo, logger)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -54,14 +63,14 @@ func main() {
 
 	go func() {
 		if err := kafkaConsumer.Start(ctx); err != nil {
-			log.Printf("Consumer error: %v\n", err)
+			logger.Error("Consumer error", "error", err)
 		}
 	}()
 
 	sig := <-sigChan
-	log.Printf("Received signal: %v. Initiating graceful shutdown...\n", sig)
+	logger.Info("Received signal, initiating graceful shutdown", "signal", sig)
 
 	cancel()
 
-	log.Println("Application stopped successfully")
+	logger.Info("Application stopped successfully")
 }
