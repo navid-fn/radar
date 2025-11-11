@@ -11,8 +11,12 @@ CREATE TABLE IF NOT EXISTS radar.trade
     quote_amount Float64,
     event_time  DateTime('Asia/Tehran'),
     inserted_at DateTime('Asia/Tehran') DEFAULT now()
-) ENGINE = ReplacingMergeTree(inserted_at)
-ORDER BY (source, trade_id);
+) ENGINE = ReplacingMergeTree(event_time)
+ORDER BY (source, trade_id)
+SETTINGS 
+    merge_with_ttl_timeout = 3600,
+    min_rows_for_wide_part = 0,
+    min_bytes_for_wide_part = 0;
 -- +goose StatementEnd
 
 -- +goose Down

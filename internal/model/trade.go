@@ -19,5 +19,10 @@ func (Trade) TableName() string {
 }
 
 func (Trade) TableOptions() string {
-	return "ENGINE = ReplacingMergeTree(inserted_at) ORDER BY (source, trade_id)"
+	return `ENGINE = ReplacingMergeTree(event_time) 
+		ORDER BY (source, trade_id)
+		SETTINGS 
+			merge_with_ttl_timeout = 3600,
+			min_rows_for_wide_part = 0,
+			min_bytes_for_wide_part = 0`
 }

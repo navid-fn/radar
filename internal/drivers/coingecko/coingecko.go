@@ -184,7 +184,7 @@ func (cgc *CoinGeckoCrawler) sendUSDPairs(tickers []Ticker) int {
 }
 
 func (cgc *CoinGeckoCrawler) fetchPage(page int) ([]Ticker, error) {
-	url := fmt.Sprintf("%s/exchanges/%s/tickers?page=%d", BaseURL, ExchangeID, page)
+	url := fmt.Sprintf("%s/exchanges/%s/tickers?page=%d&order=base_target", BaseURL, ExchangeID, page)
 
 	var lastErr error
 	for attempt := 0; attempt < MaxRetries; attempt++ {

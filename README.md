@@ -291,32 +291,31 @@ LIMIT 100
 
 ### Deduplication in ClickHouse
 
-ClickHouse's `ReplacingMergeTree` engine doesn't automatically deduplicate on read. Here's how to handle it:
+ClickHouse's `ReplacingMergeTree` engine doesn't automatically deduplicate on read. This project includes **automatic deduplication**:
 
-**Understanding the Issue:**
-- Duplicates are only removed during merge operations (background process)
-- Same `(source, trade_id)` can appear multiple times until merged
-- The row with the highest `inserted_at` is kept after merge
+**Automatic Background Merges (Configured ✅)**
+- Table is configured to merge every hour automatically
+- Duplicates are removed during merge operations
+- Latest version (highest `inserted_at`) is kept
 
-**Solution 1: Use FINAL (Simple but slower)**
-```sql
-SELECT * FROM trade FINAL
+**Manual Deduplication (When needed immediately)**
+```bash
+# Run the deduplication script
+./scripts/deduplicate.sh
 ```
 
-**Solution 2: Force Optimization (Manual merge)**
-```sql
-OPTIMIZE TABLE trade FINAL;
+Or schedule it with cron:
+```bash
+# Run every day at 2 AM
+0 2 * * * /path/to/radar/scripts/deduplicate.sh
 ```
-Then query normally without `FINAL`.
 
-**Solution 3: Use argMax Pattern (Fast for aggregations)**
-```sql
-SELECT 
-    source,
-    count(DISTINCT trade_id) as unique_trades
-FROM trade
-GROUP BY source
-```
+**Query-Time Solutions:**
+1. Use `FINAL` for simple queries: `SELECT * FROM trade FINAL`
+2. Use `COUNT(DISTINCT trade_id)` for aggregations
+3. Use `argMax` pattern for complex queries (see docs)
+
+📖 **[Complete Deduplication Guide](docs/DEDUPLICATION.md)** - Detailed explanation of all methods
 
 ### Metabase Tips
 
