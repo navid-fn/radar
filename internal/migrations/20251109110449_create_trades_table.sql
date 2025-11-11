@@ -11,11 +11,11 @@ CREATE TABLE IF NOT EXISTS radar.trade
     quote_amount Float64,
     event_time  DateTime('Asia/Tehran'),
     inserted_at DateTime('Asia/Tehran') DEFAULT now()
-) ENGINE = ReplacingMergeTree()
+) ENGINE = ReplacingMergeTree(inserted_at)
 ORDER BY (source, trade_id);
 -- +goose StatementEnd
 
 -- +goose Down
 -- +goose StatementBegin
-DROP TABLE IF EXISTS radar.trades;
+DROP TABLE IF EXISTS radar.trade;
 -- +goose StatementEnd

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -12,7 +11,6 @@ import (
 	"nobitex/radar/internal/consumer/config"
 	"nobitex/radar/internal/repository"
 
-	"github.com/pressly/goose/v3"
 	"gorm.io/driver/clickhouse"
 	"gorm.io/gorm"
 )
@@ -27,28 +25,6 @@ func main() {
 	if err != nil {
 		logger.Error("Failed to connect to database", "error", err)
 		os.Exit(1)
-	}
-
-	migrateFlag := flag.Bool("migrate", false, "Run database migrations and exit")
-	flag.Parse()
-
-	if *migrateFlag {
-		sqlDB, err := db.DB()
-		if err != nil {
-			logger.Error("Failed to get sql.DB", "error", err)
-			os.Exit(1)
-		}
-		if err := goose.SetDialect("clickhouse"); err != nil {
-			logger.Error("Goose: failed to set dialect", "error", err)
-			os.Exit(1)
-		}
-		logger.Info("Running database migrations...")
-		if err := goose.Up(sqlDB, "internal/migrations"); err != nil {
-			logger.Error("Goose migration failed", "error", err)
-			os.Exit(1)
-		}
-		logger.Info("Migrations completed successfully")
-		return
 	}
 
 	tradeRepo := repository.NewGormTradeRepository(db)

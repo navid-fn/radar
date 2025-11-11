@@ -19,5 +19,5 @@ func (Trade) TableName() string {
 }
 
 func (Trade) TableOptions() string {
-	return "ENGINE = ReplacingMergeTree() ORDER BY (source, trade_id)"
+	return "ENGINE = ReplacingMergeTree(inserted_at) ORDER BY (source, trade_id)"
 }

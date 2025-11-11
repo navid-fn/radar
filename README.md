@@ -230,10 +230,12 @@ Metabase is included for easy data visualization and analytics on your trading d
 
 Once connected, you can create dashboards with queries like:
 
+**Important Note**: Always use `FINAL` keyword or the deduplication subquery pattern to handle ReplacingMergeTree properly.
+
 **Total Trades by Exchange:**
 ```sql
 SELECT source, count(*) as total_trades
-FROM trade
+FROM trade FINAL
 GROUP BY source
 ORDER BY total_trades DESC
 ```
@@ -244,7 +246,7 @@ SELECT
     toStartOfHour(event_time) as hour,
     source,
     sum(quote_amount) as volume
-FROM trade
+FROM trade FINAL
 WHERE event_time >= now() - INTERVAL 24 HOUR
 GROUP BY hour, source
 ORDER BY hour DESC
@@ -258,11 +260,62 @@ SELECT
     min(price) as min_price,
     max(price) as max_price,
     count(*) as trade_count
-FROM trade
+FROM trade FINAL
 WHERE event_time >= now() - INTERVAL 1 HOUR
 GROUP BY symbol
 ORDER BY trade_count DESC
 LIMIT 10
+```
+
+**Deduplicated Recent Trades (Without FINAL - Better Performance):**
+```sql
+SELECT *
+FROM (
+    SELECT 
+        trade_id,
+        source,
+        symbol,
+        side,
+        price,
+        base_amount,
+        quote_amount,
+        event_time,
+        argMax(inserted_at, inserted_at) as inserted_at
+    FROM trade
+    WHERE event_time >= now() - INTERVAL 1 HOUR
+    GROUP BY trade_id, source, symbol, side, price, base_amount, quote_amount, event_time
+)
+ORDER BY event_time DESC
+LIMIT 100
+```
+
+### Deduplication in ClickHouse
+
+ClickHouse's `ReplacingMergeTree` engine doesn't automatically deduplicate on read. Here's how to handle it:
+
+**Understanding the Issue:**
+- Duplicates are only removed during merge operations (background process)
+- Same `(source, trade_id)` can appear multiple times until merged
+- The row with the highest `inserted_at` is kept after merge
+
+**Solution 1: Use FINAL (Simple but slower)**
+```sql
+SELECT * FROM trade FINAL
+```
+
+**Solution 2: Force Optimization (Manual merge)**
+```sql
+OPTIMIZE TABLE trade FINAL;
+```
+Then query normally without `FINAL`.
+
+**Solution 3: Use argMax Pattern (Fast for aggregations)**
+```sql
+SELECT 
+    source,
+    count(DISTINCT trade_id) as unique_trades
+FROM trade
+GROUP BY source
 ```
 
 ### Metabase Tips
@@ -270,3 +323,4 @@ LIMIT 10
 - **Persistent Data**: Metabase settings and dashboards are stored in the `metabase-data` volume
 - **Reset Metabase**: To start fresh, run `docker-compose down -v` and restart
 - **Custom Port**: Change `METABASE_PORT` in `.env` if port 3000 is already in use
+- **Always use FINAL**: Add `FINAL` keyword to all queries to ensure deduplicated results
