@@ -88,6 +88,7 @@ func NewBitpinCrawler() *BitpinCrawler {
 				match_time := matchesUpdate.Time
 
 				data := crawler.KafkaData{
+					ID:       t.ID,
 					Exchange: "bitpin",
 					Side:     t.Side,
 					Volume:   volume,

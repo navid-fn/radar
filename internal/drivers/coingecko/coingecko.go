@@ -161,7 +161,7 @@ func (cgc *CoinGeckoCrawler) sendUSDPairs(tickers []Ticker) int {
 			Exchange: "binance",
 			Symbol:   fmt.Sprintf("%s/%s", ticker.Base, "USDT"),
 			Price:    ticker.ConvertedLast.USD,
-			Volume:   ticker.ConvertedVolume.USD,
+			Volume:   ticker.Volume,
 			Time:     ticker.LastFetchAt,
 			Quantity: ticker.ConvertedVolume.USD,
 			Side:     "all",

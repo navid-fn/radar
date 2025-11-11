@@ -225,10 +225,10 @@ func (c *Consumer) transformKafkaDataToTrade(kd crawler.KafkaData) (*model.Trade
 
 func (c *Consumer) parseTime(timeStr string) (time.Time, error) {
 	timeFormats := []string{
-		time.RFC3339,          // "2006-01-02T15:04:05Z07:00"
-		"2006-01-02T15:04:05", // "2025-11-10T11:31:00"
-		"2006-01-02 15:04:05", // "2025-11-10 11:31:00"
-		time.RFC3339Nano,      // "2006-01-02T15:04:05.999999999Z07:00"
+		time.RFC3339,          
+		"2006-01-02T15:04:05", 
+		"2006-01-02 15:04:05",
+		time.RFC3339Nano,
 	}
 
 	for _, format := range timeFormats {
