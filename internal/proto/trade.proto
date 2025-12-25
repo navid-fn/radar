@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "nobitex/radar/proto";
+
+message TradeData {
+  string id = 1; // ID of each trade which is Unique, some exchanges return this. For others, we generate it
+  string exchange = 2; // Name of exchange we are scrapping
+  string symbol = 3; // Market symbol: BTCIRT,BTCUSDT
+  double price = 4; // Price of Market
+  double volume = 5; // volume of trade
+  double quantity = 6;  // result of price * volume
+  string side = 7; // buy or sell or all ("all" for aggregate API like coingecko)
+  string time = 8; // date time that trade happened
+  double usdt_price = 9; // latest price of USDT/IRT market
+}
+
+message TradeDataBatch {
+  repeated TradeData trades = 1;
+}
+
+

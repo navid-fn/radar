@@ -1,325 +1,72 @@
-# Radar - Cryptocurrency Trading Data Aggregator
+# Main Purpose of Project
 
-A high-performance system for collecting and storing cryptocurrency trading data using Go, Kafka, and ClickHouse.
+We want to check the market and find our place in Exchange market.
+by scarping latest_trades of each exchange and getting international data, we will find sum of volumes(IRT and USDT), count of trades, etc.
+this will help us to compare each exchanges and decide which currency we should focus
 
-## Quick Start
+# Project Layout:
 
-1. Copy the environment file:
-   ```bash
-   cp env.example .env
-   ```
+[https://github.com/golang-standards/project-layout]
 
-2. Start the services:
-   ```bash
-   docker-compose up -d
-   ```
+# Best Practices
 
-3. Check service status:
-   ```bash
-   docker-compose ps
-   ```
+[https://google.github.io/styleguide/go/best-practices]
 
-## Services
+# we will have a two main app:
 
-- **ClickHouse**: `localhost:8123` (HTTP), `localhost:9000` (TCP)
-- **Kafka**: `localhost:9092`
-- **Zookeeper**: `localhost:2181`
-- **Metabase**: `localhost:3000` (Web UI)
+1. scraper
+2. ingester
 
-## Configuration
+# for scraper:
 
-Modify the `.env` file to customize:
-- Database credentials
-- Port mappings
-- Kafka settings
-- Zookeeper configuration
+1. Kafka connection
+2. function to fetch available markets
+3. chunk the markets so each worker only scrap that markets
+4. fetch data from the endpoint(websocket or API)
 
-## Management Commands
+## dependency injections
 
-```bash
-# Start services
-docker-compose up -d
-
-# Stop services
-docker-compose down
-
-# View logs
-docker-compose logs -f [service_name]
-
-# Reset data (removes volumes)
-docker-compose down -v
-```
-
-## Default Credentials
-
-- **ClickHouse**: `default/password`
-
-## Testing ClickHouse
-
-```bash
-# Test HTTP interface
-curl "http://localhost:8123/ping"
-
-# Test with authentication
-curl -u default:password "http://localhost:8123/?query=SELECT%20version()"
-
-# Test with POST request
-echo "SELECT version()" | curl --data-binary @- "http://localhost:8123/?user=default&password=password"
-```
-
-## Kafka Consumer
-
-The consumer reads trading data from Kafka and stores it in ClickHouse with support for multiple concurrent workers and batch processing.
-
-### Configuration
-
-Configure the consumer via environment variables in `.env`:
-
-```env
-# Kafka Consumer Configuration
-KAFKA_BROKER=localhost:9092
-KAFKA_TOPIC=radar_trades
-KAFKA_GROUP_ID=clickhouse-consumers-v3
-WORKER_COUNT=1
-BATCH_SIZE=200
-BATCH_TIMEOUT_SECONDS=5
-
-# Database Configuration
-CLICKHOUSE_HOST=localhost
-CLICKHOUSE_TCP_PORT=9000
-CLICKHOUSE_DB=default
-CLICKHOUSE_USER=default
-CLICKHOUSE_PASSWORD=password
-```
-
-### Running the Consumer
-
-1. **Run Migrations** (first time only):
-   ```bash
-   go run cmd/consumer/main.go -migrate
-   ```
-
-2. **Start Consumer**:
-   ```bash
-   go run cmd/consumer/main.go
-   ```
-
-### Features
-
-- **Multiple Workers**: Process messages concurrently using configurable worker pool (`WORKER_COUNT`)
-- **Batch Processing**: Accumulate trades and insert in batches for better performance (`BATCH_SIZE`)
-- **Timeout-Based Flush**: Automatically flush partial batches after timeout (`BATCH_TIMEOUT_SECONDS`)
-- **Graceful Shutdown**: Clean shutdown on SIGTERM/SIGINT with proper resource cleanup and batch flushing
-- **Error Handling**: Comprehensive error logging with automatic retry on transient failures
-- **Message Commit**: Manual commit after successful batch processing to ensure data integrity
-- **Flexible JSON Parsing**: Automatically handles both single trade objects and arrays of trades
-- **Data Transformation**: Automatically transforms `crawler.KafkaData` format to `model.Trade` format
-
-### Message Format
-
-The consumer expects Kafka messages in the `crawler.KafkaData` format, which will be automatically transformed to `model.Trade` for database storage.
-
-**Single Trade:**
-```json
-{
-  "ID": "12345",
-  "exchange": "binance",
-  "symbol": "BTCUSDT",
-  "side": "buy",
-  "price": 45000.50,
-  "volume": 0.1,
-  "quantity": 4500.05,
-  "time": "2024-01-01T12:00:00Z"
-}
-```
-
-**Array of Trades:**
-```json
-[
-  {
-    "ID": "12345",
-    "exchange": "binance",
-    "symbol": "BTCUSDT",
-    "side": "buy",
-    "price": 45000.50,
-    "volume": 0.1,
-    "quantity": 4500.05,
-    "time": "2024-01-01T12:00:00Z"
-  },
-  {
-    "ID": "12346",
-    "exchange": "binance",
-    "symbol": "ETHUSDT",
-    "side": "sell",
-    "price": 3000.25,
-    "volume": 1.5,
-    "quantity": 4500.38,
-    "time": "2024-01-01T12:00:01Z"
-  }
-]
-```
-
-**Field Mapping:**
-- `ID` → `trade_id`
-- `exchange` → `source`
-- `symbol` → `symbol`
-- `side` → `side`
-- `price` → `price`
-- `volume` → `base_amount`
-- `quantity` → `quote_amount`
-- `time` → `event_time`
-
-### Scaling & Optimization
-
-**Worker Count (`WORKER_COUNT`)**:
-- **Low traffic**: 1-3 workers
-- **Medium traffic**: 3-5 workers
-- **High traffic**: 5-10 workers
-
-**Batch Size (`BATCH_SIZE`)**:
-- **Small batches** (50-100): Lower latency, more frequent database writes
-- **Medium batches** (200-500): Balanced throughput and latency (recommended)
-- **Large batches** (500-1000): Higher throughput, increased latency
-
-**Batch Timeout (`BATCH_TIMEOUT_SECONDS`)**:
-- **Low timeout** (1-3s): Better for low-traffic scenarios with strict latency requirements
-- **Medium timeout** (5-10s): Balanced approach (recommended)
-- **High timeout** (15-30s): Maximize batch utilization in high-traffic scenarios
-
-Monitor your system resources and Kafka consumer lag to determine optimal settings. The consumer will:
-- Flush when `BATCH_SIZE` is reached (full batch)
-- Flush when `BATCH_TIMEOUT_SECONDS` elapses (partial batch)
-- Flush remaining trades on graceful shutdown
-
-## Metabase - Data Visualization
-
-Metabase is included for easy data visualization and analytics on your trading data.
-
-### Accessing Metabase
-
-1. **Start all services**:
-   ```bash
-   docker-compose up -d
-   ```
-
-2. **Open Metabase** in your browser:
-   ```
-   http://localhost:3000
-   ```
-
-3. **First-time Setup** (only needed once):
-   - Create your admin account
-   - Choose "I'll add my data later" or proceed to add ClickHouse
-   
-### Connecting ClickHouse to Metabase
-
-1. **In Metabase**, go to Settings → Admin → Databases → Add Database
-
-2. **Configure ClickHouse connection**:
-   - **Database type**: Select "ClickHouse"
-   - **Display name**: `Radar Trades`
-   - **Host**: `clickhouse` (use the container name, not localhost)
-   - **Port**: `8123`
-   - **Database name**: `default`
-   - **Username**: `default`
-   - **Password**: `password`
-
-3. **Save** and test the connection
-
-### Sample Queries
-
-Once connected, you can create dashboards with queries like:
-
-**Important Note**: Always use `FINAL` keyword or the deduplication subquery pattern to handle ReplacingMergeTree properly.
-
-**Total Trades by Exchange:**
-```sql
-SELECT source, count(*) as total_trades
-FROM trade FINAL
-GROUP BY source
-ORDER BY total_trades DESC
-```
-
-**Trading Volume Over Time:**
-```sql
-SELECT 
-    toStartOfHour(event_time) as hour,
-    source,
-    sum(quote_amount) as volume
-FROM trade FINAL
-WHERE event_time >= now() - INTERVAL 24 HOUR
-GROUP BY hour, source
-ORDER BY hour DESC
-```
-
-**Price Analysis by Symbol:**
-```sql
-SELECT 
-    symbol,
-    avg(price) as avg_price,
-    min(price) as min_price,
-    max(price) as max_price,
-    count(*) as trade_count
-FROM trade FINAL
-WHERE event_time >= now() - INTERVAL 1 HOUR
-GROUP BY symbol
-ORDER BY trade_count DESC
-LIMIT 10
-```
-
-**Deduplicated Recent Trades (Without FINAL - Better Performance):**
-```sql
-SELECT *
-FROM (
-    SELECT 
-        trade_id,
-        source,
-        symbol,
-        side,
-        price,
-        base_amount,
-        quote_amount,
-        event_time,
-        argMax(inserted_at, inserted_at) as inserted_at
-    FROM trade
-    WHERE event_time >= now() - INTERVAL 1 HOUR
-    GROUP BY trade_id, source, symbol, side, price, base_amount, quote_amount, event_time
-)
-ORDER BY event_time DESC
-LIMIT 100
-```
-
-### Deduplication in ClickHouse
-
-ClickHouse's `ReplacingMergeTree` engine doesn't automatically deduplicate on read. This project includes **automatic deduplication**:
-
-**Automatic Background Merges (Configured ✅)**
-- Table is configured to merge every hour automatically
-- Duplicates are removed during merge operations
-- Latest version (highest `inserted_at`) is kept
-
-**Manual Deduplication (When needed immediately)**
-```bash
-# Run the deduplication script
-./scripts/deduplicate.sh
-```
-
-Or schedule it with cron:
-```bash
-# Run every day at 2 AM
-0 2 * * * /path/to/radar/scripts/deduplicate.sh
-```
-
-**Query-Time Solutions:**
-1. Use `FINAL` for simple queries: `SELECT * FROM trade FINAL`
-2. Use `COUNT(DISTINCT trade_id)` for aggregations
-3. Use `argMax` pattern for complex queries (see docs)
-
-📖 **[Complete Deduplication Guide](docs/DEDUPLICATION.md)** - Detailed explanation of all methods
-
-### Metabase Tips
-
-- **Persistent Data**: Metabase settings and dashboards are stored in the `metabase-data` volume
-- **Reset Metabase**: To start fresh, run `docker-compose down -v` and restart
-- **Custom Port**: Change `METABASE_PORT` in `.env` if port 3000 is already in use
-- **Always use FINAL**: Add `FINAL` keyword to all queries to ensure deduplicated results
+1. Queue connection (we may change to another thing and its good for testing)
+2. Basic Scrapper so that each of them must have some functions
+
+# for ingester:
+
+1. Kafka connection
+2. Database Connection
+3. Number of workers
+4. Bach the result TO prevent heavy hit on database
+5. some mechanism to prevent insertion of repeated data
+
+- note: for binance and trending api will be little different from our default scraper
+
+What we want to do in project?
+
+## websockets
+
+based on the document of each exchange, configure our scraper to check how many connection we allowed
+to have and how many market we allow to pass in websocket.
+
+## API
+
+respect the API rate limit and its main purpose is to fill gaps if websocket connection lost
+
+# problems
+
+1. we need some metrics to check how stable is connections
+2. place to check our logs
+3. we need to close some connections, because some of the exchanges may not have any trades(closed) but fetchMarket dont say it
+4. mechanism to prevent repeated data. now we are using the ReplacingMergeTree on ClickHouse
+5. how we want to run it in production level. (DockerFile for each driver?)
+6. we have to clean "symbol" so that we have same symbol for comparing
+7. USDT/IRT rate for each trade (accuracy is not important)
+8. Validation of data we are collecting or filling gap if something happened to our scraper (maybe use OHLC and live trading)
+9. (we can think about it later) have a command to auto generate a basic driver to prevent duplication or complexity
+
+
+
+# checks
+
+1. checks we can get trade data history from api
+2. mechanis of normalize and pars into driver part
+3. input and output of data kafka from json to proto
+4. add ohlc to our data

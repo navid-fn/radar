@@ -1,12 +1,1 @@
 .env
-
-__pycache__
-
-# Go binaries
-radar-go
-radar-go-linux
-*.tar.gz
-
-# Go build cache
-.cache/
-.venv/
