@@ -7,6 +7,10 @@ import (
 	"strings"
 )
 
+const (
+	WallexMarketsAPI = "https://api.wallex.ir/hector/web/v1/markets"
+)
+
 type market struct {
 	Symbol  string `json:"symbol"`
 	Enabled bool   `json:"is_market_type_enable"`
@@ -50,14 +54,14 @@ func cleanSymbol(s string) string {
 }
 
 func getLatestUSDTPrice() float64 {
-	resp, err := http.Get(tradesAPI)
+	resp, err := http.Get(WallexMarketsAPI)
 	if err != nil {
-		return 0
+		return getLatestUSDTPrice()
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return 0
+		return getLatestUSDTPrice()
 	}
 
 	var marketAPIresposnse apiMarketResponse
