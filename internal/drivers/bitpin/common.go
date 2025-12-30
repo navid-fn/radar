@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -16,16 +15,6 @@ const marketsAPI = "https://api.bitpin.ir/api/v1/mkt/markets/"
 type market struct {
 	Symbol    string `json:"symbol"`
 	Tradeable bool   `json:"tradable"`
-}
-
-func cleanSymbol(s string) string {
-	if strings.HasSuffix(s, "_IRT") {
-		s = strings.TrimSuffix(s, "_IRT")
-		return s + "/IRT"
-	} else {
-		s = strings.TrimSuffix(s, "_USDT")
-		return s + "/USDT"
-	}
 }
 
 type ticker struct {
@@ -76,3 +65,4 @@ func getLatestUSDTPrice() float64 {
 	}
 	return 0
 }
+

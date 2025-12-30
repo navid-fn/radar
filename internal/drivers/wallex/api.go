@@ -112,7 +112,7 @@ func (w *WallexAPI) fetchTrades(ctx context.Context, symbol string) error {
 			side = "buy"
 		}
 
-		cleanedSymbol := cleanSymbol(symbol)
+		cleanedSymbol := scraper.NormalizeSymbol("wallex", symbol)
 		if cleanedSymbol == "USDT/IRT" {
 			w.usdtMu.Lock()
 			w.usdtPrice = price

@@ -122,7 +122,8 @@ func (b *BitpinAPI) fetchTrades(ctx context.Context, symbol string) error {
 		sec, dec := math.Modf(timestamp)
 		tradeTime := time.Unix(int64(sec), int64(dec*1e9))
 
-		cleanedSymbol := cleanSymbol(symbol)
+		cleanedSymbol := scraper.NormalizeSymbol("bitpin", symbol)
+
 		if cleanedSymbol == "USDT/IRT" {
 			b.usdtMu.Lock()
 			b.usdtPrice = price
@@ -147,3 +148,4 @@ func (b *BitpinAPI) fetchTrades(ctx context.Context, symbol string) error {
 	}
 	return nil
 }
+

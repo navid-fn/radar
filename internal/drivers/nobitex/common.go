@@ -81,27 +81,6 @@ func transformPair(pair string) string {
 	return strings.Join(parts, "")
 }
 
-// TODO: change this to universal function to support all exchanges
-// normalize pairs to have same symbol in database
-func cleanSymbol(s string) string {
-	if strings.HasSuffix(s, "IRT") {
-		s = strings.TrimSuffix(s, "IRT")
-		return s + "/IRT"
-	} else {
-		s = strings.TrimSuffix(s, "USDT")
-		return s + "/USDT"
-	}
-}
-
-// TODO: change this to universal function to support all exchanges
-// normalize price to Toman
-func cleanPrice(s string, p float64) float64 {
-	if strings.HasSuffix(s, "IRT") {
-		return p / 10
-	}
-	return p
-}
-
 func getStringValue(m map[string]any, key string) string {
 	if v, ok := m[key]; ok {
 		switch val := v.(type) {
@@ -146,3 +125,4 @@ func getLatestUSDTPrice() float64 {
 	return usdtPriceFloat / 10
 
 }
+

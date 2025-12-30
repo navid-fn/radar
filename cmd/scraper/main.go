@@ -63,12 +63,6 @@ func main() {
 		coingecko.NewCoinGeckoScraper(kafkaWriter, logger, &appConfig.Coingecko),
 	}
 
-	scrapers = []scraper.Scraper{
-		// Ramzinex
-		ramzinex.NewRamzinexScraper(kafkaWriter, logger),
-		ramzinex.NewRamzinexAPIScraper(kafkaWriter, logger),
-	}
-
 	// Setup graceful shutdown
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

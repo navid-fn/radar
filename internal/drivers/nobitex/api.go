@@ -104,8 +104,9 @@ func (n *NobitexAPI) fetchTrades(ctx context.Context, symbol string) error {
 			continue
 		}
 
-		cleanedSymbol := cleanSymbol(symbol)
-		cleanedPrice := cleanPrice(cleanedSymbol, price)
+		cleanedSymbol := scraper.NormalizeSymbol("nobitex", symbol)
+		cleanedPrice := scraper.NormalizePrice(cleanedSymbol, price)
+
 		tradeTime := scraper.TimestampToRFC3339(t.Time)
 
 		if cleanedSymbol == "USDT/IRT" {

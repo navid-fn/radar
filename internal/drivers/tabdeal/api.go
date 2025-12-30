@@ -137,7 +137,7 @@ func (t *TabdealAPI) fetchTrades(ctx context.Context, symbol string) error {
 			side = "buy"
 		}
 
-		cleanedSymbol := cleanSymbol(symbol)
+		cleanedSymbol := scraper.NormalizeSymbol("tabdeal", symbol)
 		if cleanedSymbol == "USDT/IRT" {
 			t.usdtMu.Lock()
 			t.usdtPrice = price

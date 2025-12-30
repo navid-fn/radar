@@ -158,8 +158,8 @@ func (n *NobitexWS) createTrade(data map[string]any, symbol string) *pb.TradeDat
 		return nil
 	}
 
-	cleanedSymbol := cleanSymbol(symbol)
-	cleanedPrice := cleanPrice(cleanedSymbol, price)
+	cleanedSymbol := scraper.NormalizeSymbol("nobitex", symbol)
+	cleanedPrice := scraper.NormalizePrice(cleanedSymbol, price)
 
 	if cleanedSymbol == "USDT/IRT" {
 		n.usdtMu.Lock()

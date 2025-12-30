@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 )
+
 const usdtPriceAPI = "https://api-web.tabdeal.org/r/plots/currencies/dynamic-info/"
 
 type market struct {
@@ -24,16 +24,6 @@ type tradesInfo struct {
 	Buyer    bool   `json:"isBuyerMaker"`
 }
 
-func cleanSymbol(s string) string {
-	if strings.HasSuffix(s, "IRT") {
-		s = strings.TrimSuffix(s, "IRT")
-		return s + "/IRT"
-	} else {
-		s = strings.TrimSuffix(s, "USDT")
-		return s + "/USDT"
-	}
-}
-
 func getLatestUSDTPrice() float64 {
 	response, err := http.Get(usdtPriceAPI)
 	if err != nil {
@@ -49,7 +39,7 @@ func getLatestUSDTPrice() float64 {
 	type currencies struct {
 		Currencies map[string]map[string]ticker `json:"currencies"`
 	}
-	var prices currencies 
+	var prices currencies
 	if err := json.NewDecoder(response.Body).Decode(&prices); err != nil {
 		return 0
 	}

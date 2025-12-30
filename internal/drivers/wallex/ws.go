@@ -96,7 +96,7 @@ func (w *WallexWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, erro
 	}
 
 	parts := strings.Split(channel, "@")
-	symbol := cleanSymbol(parts[0])
+	symbol := scraper.NormalizeSymbol("wallex", parts[0])
 
 	side := "buy"
 	if isBuy, ok := data["isBuyOrder"].(bool); ok && !isBuy {

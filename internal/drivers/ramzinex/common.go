@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
-	"strings"
 )
 
 const (
@@ -94,21 +93,4 @@ func getLatestUSDTPrice() int64 {
 	}
 	cleanedPrice := priceData.Data["price"] / 10
 	return cleanedPrice
-}
-
-func cleanSymbol(s string) string {
-	if strings.HasSuffix(s, "IRR") {
-		s = strings.TrimSuffix(s, "IRR")
-		return s + "/IRT"
-	} else {
-		s = strings.TrimSuffix(s, "USDT")
-		return s + "/USDT"
-	}
-}
-
-func cleanPrice(s string, p float64) float64 {
-	if strings.HasSuffix(s, "IRT") {
-		return p / 10
-	}
-	return p
 }

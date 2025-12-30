@@ -155,7 +155,7 @@ func (b *BitpinWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, erro
 				volume = quoteAmount / price
 			}
 		}
-		cleanedSymbol := cleanSymbol(symbol)
+		cleanedSymbol := scraper.NormalizeSymbol("bitpin", symbol)
 
 		if cleanedSymbol == "USDT/IRT" {
 			b.usdtMu.Lock()

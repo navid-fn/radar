@@ -155,8 +155,8 @@ func (r *RamzinexWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, er
 			continue
 		}
 
-		cleanedSymbol := cleanSymbol(strings.ToUpper(pairName))
-		cleanedPrice := cleanPrice(cleanedSymbol, row[0].(float64))
+		cleanedSymbol := scraper.NormalizeSymbol("ramzinex", strings.ToUpper(pairName))
+		cleanedPrice := scraper.NormalizePrice(cleanedSymbol, row[0].(float64))
 		volume := row[1].(float64)
 		tradeTime := convertTimeToRFC3339(row[2].(string))
 		side := row[3].(string)

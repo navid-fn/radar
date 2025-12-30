@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
-	"strings"
 	"strconv"
 )
 
@@ -73,16 +72,6 @@ func fetchMarkets(logger *slog.Logger) ([]string, error) {
 	return markets, nil
 }
 
-func cleanSymbol(s string) string {
-	if strings.HasSuffix(s, "TMN") {
-		s = strings.TrimSuffix(s, "TMN")
-		return s + "/IRT"
-	} else {
-		s = strings.TrimSuffix(s, "USDT")
-		return s + "/USDT"
-	}
-}
-
 func getLatestUSDTPrice() float64 {
 	resp, err := http.Get(wallexMarketsAPI)
 	if err != nil {
@@ -107,3 +96,4 @@ func getLatestUSDTPrice() float64 {
 	}
 	return 0
 }
+
