@@ -82,6 +82,7 @@ func (b *BitpinAPI) pollSymbol(ctx context.Context, symbol string) {
 	}
 }
 
+// get latest trades from related API with given symbol
 func (b *BitpinAPI) fetchTrades(ctx context.Context, symbol string) error {
 	resp, err := http.Get(fmt.Sprintf(tradesAPI, symbol))
 	if err != nil {

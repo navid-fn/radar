@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 )
+const usdtPriceAPI = "https://api-web.tabdeal.org/r/plots/currencies/dynamic-info/"
 
 type market struct {
 	Symbol        string `json:"symbol"`
@@ -34,7 +35,7 @@ func cleanSymbol(s string) string {
 }
 
 func getLatestUSDTPrice() float64 {
-	response, err := http.Get("https://api-web.tabdeal.org/r/plots/currencies/dynamic-info/")
+	response, err := http.Get(usdtPriceAPI)
 	if err != nil {
 		fmt.Println("Error Calling api")
 		return 0

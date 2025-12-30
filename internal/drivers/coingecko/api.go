@@ -34,6 +34,24 @@ type CoinGeckoScraper struct {
 	scheduleHour int
 }
 
+type TickerResponse struct {
+	Tickers  []Ticker `json:"tickers"`
+	Exchange string   `json:"-"`
+}
+
+type Ticker struct {
+	Base            string        `json:"base"`
+	Target          string        `json:"target"`
+	ConvertedLast   ConvertedData `json:"converted_last"`
+	ConvertedVolume ConvertedData `json:"converted_volume"`
+	LastFetchAt     string        `json:"last_fetch_at"`
+	Volume          float64       `json:"volume"`
+}
+
+type ConvertedData struct {
+	USD float64 `json:"usd"`
+}
+
 func NewCoinGeckoScraper(kafkaWriter *kafka.Writer, logger *slog.Logger, cfg *configs.CoingeckoConfigs) *CoinGeckoScraper {
 	return &CoinGeckoScraper{
 		sender:       scraper.NewSender(kafkaWriter, logger),
@@ -154,14 +172,14 @@ func (c *CoinGeckoScraper) sendUSDPairs(ctx context.Context, tickers []Ticker, e
 
 		symbol := fmt.Sprintf("%s/USDT", ticker.Base)
 		trade := &proto.TradeData{
-			Id:        scraper.GenerateTradeID(exchange, symbol, ticker.LastFetchAt, ticker.ConvertedLast.USD, volume, "all"),
-			Exchange:  exchange,
-			Symbol:    symbol,
-			Price:     ticker.ConvertedLast.USD,
-			Volume:    volume,
-			Quantity:  ticker.ConvertedVolume.USD,
-			Side:      "all",
-			Time:      ticker.LastFetchAt,
+			Id:       scraper.GenerateTradeID(exchange, symbol, ticker.LastFetchAt, ticker.ConvertedLast.USD, volume, "all"),
+			Exchange: exchange,
+			Symbol:   symbol,
+			Price:    ticker.ConvertedLast.USD,
+			Volume:   volume,
+			Quantity: ticker.ConvertedVolume.USD,
+			Side:     "all",
+			Time:     ticker.LastFetchAt,
 		}
 
 		if err := c.sender.SendTrade(ctx, trade); err != nil {

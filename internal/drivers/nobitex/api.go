@@ -17,8 +17,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const latestTradeAPI = "https://apiv2.nobitex.ir/v2/trades/"
-
 type NobitexAPI struct {
 	sender      *scraper.Sender
 	logger      *slog.Logger

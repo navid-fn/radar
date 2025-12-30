@@ -41,15 +41,15 @@ func (b *BitpinWS) Name() string { return "bitpin" }
 func (b *BitpinWS) Run(ctx context.Context) error {
 	b.logger.Info("Starting Bitpin WebSocket scraper", "usdtPrice", b.usdtPrice)
 
-	markets, err := fetchMarkets(b.logger)
+	symbols, err := fetchMarkets(b.logger)
 	if err != nil {
 		return err
 	}
-	if len(markets) == 0 {
+	if len(symbols) == 0 {
 		return fmt.Errorf("no markets found")
 	}
 
-	chunks := scraper.ChunkSlice(markets, maxSymbolsPerConn)
+	chunks := scraper.ChunkSlice(symbols, maxSymbolsPerConn)
 	scraper.RunWorkers(ctx, chunks, "bitpin", func() *scraper.WSClient {
 		return b.createClient()
 	}, b.logger)
