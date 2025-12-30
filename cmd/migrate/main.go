@@ -1,7 +1,9 @@
 package main
 
 import (
+	"log/slog"
 	"nobitex/radar/configs"
+	"os"
 
 	"github.com/pressly/goose/v3"
 	"gorm.io/driver/clickhouse"
@@ -9,26 +11,31 @@ import (
 )
 
 func main() {
-	cfg := configs.Load()
-	db, err := gorm.Open(clickhouse.Open(cfg.ClickHouseDSN), &gorm.Config{})
+	cfg := configs.AppLoad()
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+
+	db, err := gorm.Open(clickhouse.Open(cfg.DBDSN), &gorm.Config{})
 
 	if err != nil {
-		cfg.Logger.Error("Failed to connect to database", "error", err)
+		logger.Error("Failed to connect to database", "error", err)
 		return
 	}
 	sqlDB, err := db.DB()
 	if err != nil {
-		cfg.Logger.Error("Failed to get sql.DB", "error", err)
+		logger.Error("Failed to get sql.DB", "error", err)
 		return
 	}
 	if err := goose.SetDialect("clickhouse"); err != nil {
-		cfg.Logger.Error("Goose: failed to set dialect", "error", err)
+		logger.Error("Goose: failed to set dialect", "error", err)
 		return
 	}
-	cfg.Logger.Info("Running database migrations...")
+	logger.Info("Running database migrations...")
 	if err := goose.Up(sqlDB, "internal/migrations"); err != nil {
-		cfg.Logger.Error("Goose migration failed", "error", err)
+		logger.Error("Goose migration failed", "error", err)
 		return
 	}
-	cfg.Logger.Info("Migrations completed successfully")
+	logger.Info("Migrations completed successfully")
 }

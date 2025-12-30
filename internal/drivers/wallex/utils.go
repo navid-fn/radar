@@ -50,7 +50,7 @@ func cleanSymbol(s string) string {
 }
 
 func getLatestUSDTPrice() float64 {
-	resp, err := http.Get(WallexAPIURL)
+	resp, err := http.Get(tradesAPI)
 	if err != nil {
 		return 0
 	}

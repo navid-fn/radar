@@ -2,304 +2,218 @@ package ingester
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
+	"math"
 	"time"
 
-	"nobitex/radar/configs"
 	"nobitex/radar/internal/models"
 	pb "nobitex/radar/internal/proto"
-	"nobitex/radar/internal/scraper"
 	"nobitex/radar/internal/storage"
 
 	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
 )
 
+type Config struct {
+	BatchSize    int
+	BatchTimeout time.Duration
+}
+
 type Ingester struct {
-	reader       *kafka.Reader
-	TradeStorage storage.TradeStorage
-	workerCount  int
-	batchSize    int
-	batchTimeout time.Duration
-	messagesChan chan kafka.Message
-	wg           sync.WaitGroup
-	logger       *slog.Logger
+	reader  *kafka.Reader
+	storage storage.TradeStorage
+	logger  *slog.Logger
+	cfg     Config
 }
 
-func NewIngester(cfg *configs.Config, tradeStorage storage.TradeStorage) *Ingester {
-	kafkaConfig := cfg.KafkaConfigs
-	reader := kafka.NewReader(*configs.GetKafkaReaderConfig(&kafkaConfig))
-
+// It receives the tools it needs, it doesn't create them.
+func NewIngester(reader *kafka.Reader, storage storage.TradeStorage, logger *slog.Logger, cfg Config) *Ingester {
 	return &Ingester{
-		reader:       reader,
-		TradeStorage: tradeStorage,
-		workerCount:  cfg.KafkaConfigs.WorkerCount,
-		batchSize:    cfg.KafkaConfigs.BatchSize,
-		batchTimeout: time.Duration(cfg.KafkaConfigs.BatchTimeoutSeconds) * time.Second,
-		messagesChan: make(chan kafka.Message, cfg.KafkaConfigs.WorkerCount*2),
-		logger:       cfg.Logger,
+		reader:  reader,
+		storage: storage,
+		logger:  logger,
+		cfg:     cfg,
 	}
 }
 
+// Start is a blocking function that runs the main loop
 func (ig *Ingester) Start(ctx context.Context) error {
-	ig.logger.Info("Starting Kafka consumer",
-		"workers", ig.workerCount,
-		"topic", ig.reader.Config().Topic,
-		"groupID", ig.reader.Config().GroupID,
-		"batchSize", ig.batchSize,
-		"batchTimeout", ig.batchTimeout)
+	ig.logger.Info("Starting Ingester Loop", "batch_size", ig.cfg.BatchSize)
 
-	for i := range ig.workerCount {
-		ig.wg.Add(1)
-		go ig.worker(ctx, i+1)
-	}
+	// 1. Initialize Buffers
+	// We reuse these arrays to reduce Garbage Collection (GC) pressure
+	batchTrades := make([]*models.Trade, 0, ig.cfg.BatchSize)
+	batchMsgs := make([]kafka.Message, 0, ig.cfg.BatchSize)
 
-	go ig.readMessages(ctx)
-
-	<-ctx.Done()
-	ig.logger.Info("Shutting down consumer...")
-
-	close(ig.messagesChan)
-
-	ig.wg.Wait()
-
-	if err := ig.reader.Close(); err != nil {
-		ig.logger.Error("Error closing reader", "error", err)
-		return err
-	}
-
-	ig.logger.Info("Kafka consumer shut down cleanly")
-	return nil
-}
-
-func (ig *Ingester) readMessages(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			m, err := ig.reader.FetchMessage(ctx)
-			if err != nil {
-				if ctx.Err() != nil {
-					return
-				}
-				ig.logger.Error("Error fetching message", "error", err)
-				continue
-			}
-
-			select {
-			case ig.messagesChan <- m:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}
-}
-
-func (ig *Ingester) worker(ctx context.Context, workerID int) {
-	defer ig.wg.Done()
-
-	ig.logger.Info("Worker started",
-		"workerID", workerID,
-		"batchSize", ig.batchSize,
-		"timeout", ig.batchTimeout)
-
-	batch := make([]*models.Trade, 0, ig.batchSize)
-	messagesToCommit := make([]kafka.Message, 0, ig.batchSize)
-	ticker := time.NewTicker(ig.batchTimeout)
+	ticker := time.NewTicker(ig.cfg.BatchTimeout)
 	defer ticker.Stop()
 
-	flushBatch := func() {
-		if len(batch) == 0 {
-			return
+	// 2. Define Flush Logic
+	flush := func() error {
+		if len(batchTrades) == 0 {
+			return nil
 		}
 
-		if err := ig.TradeStorage.CreateTrades(batch); err != nil {
-			ig.logger.Error("Error creating batch",
-				"workerID", workerID,
-				"batchSize", len(batch),
-				"error", err)
-		} else {
-			if err := ig.reader.CommitMessages(ctx, messagesToCommit...); err != nil {
-				ig.logger.Error("Error committing messages", "workerID", workerID, "error", err)
-			} else {
-				ig.logger.Info("Successfully inserted batch",
-					"workerID", workerID,
-					"batchSize", len(batch))
+		// Retry Loop: We NEVER drop data. We retry until DB accepts it.
+		for {
+			if err := ig.storage.CreateTrades(batchTrades); err != nil {
+				ig.logger.Error("DB Insert Failed (Retrying in 2s)", "error", err)
+
+				select {
+				case <-ctx.Done():
+					return ctx.Err() // Shutdown requested during retry
+				case <-time.After(2 * time.Second):
+					continue // Retry
+				}
 			}
+			break // Success
 		}
 
-		batch = batch[:0]
-		messagesToCommit = messagesToCommit[:0]
-		ticker.Reset(ig.batchTimeout)
+		// Commit Kafka offsets AFTER DB insert
+		if err := ig.reader.CommitMessages(ctx, batchMsgs...); err != nil {
+			ig.logger.Warn("Failed to commit offsets", "error", err)
+		}
+
+		// Clear buffers (keep capacity)
+		batchTrades = batchTrades[:0]
+		batchMsgs = batchMsgs[:0]
+		ticker.Reset(ig.cfg.BatchTimeout)
+		return nil
 	}
 
+	// 3. Main Event Loop
 	for {
 		select {
-		case msg, ok := <-ig.messagesChan:
-			if !ok {
-				flushBatch()
-				ig.logger.Info("Worker stopped", "workerID", workerID)
-				return
+		case <-ctx.Done():
+			return flush() // Try to flush one last time on shutdown
+
+		case <-ticker.C:
+			if err := flush(); err != nil {
+				return err
 			}
 
-			trades, err := ig.parseMessage(msg)
+		default:
+			// Fetch with short timeout so we can check ticker/ctx often
+			fetchCtx, cancel := context.WithTimeout(ctx, ig.cfg.BatchTimeout)
+			m, err := ig.reader.FetchMessage(fetchCtx)
+			cancel()
+
 			if err != nil {
-				ig.logger.Error("Error parsing message",
-					"workerID", workerID,
-					"offset", msg.Offset,
-					"error", err)
+				if errors.Is(err, context.DeadlineExceeded) {
+					continue // No new messages, loop around
+				}
+				if errors.Is(err, context.Canceled) {
+					return nil
+				}
+				ig.logger.Error("Kafka Fetch Error", "error", err)
+				time.Sleep(time.Second) // Backoff
 				continue
 			}
 
-			batch = append(batch, trades...)
-			messagesToCommit = append(messagesToCommit, msg)
-
-			if len(batch) >= ig.batchSize {
-				flushBatch()
+			// Parse & Accumulate
+			trades, err := ig.parseMessage(m)
+			if err != nil {
+				// Log more details about garbage data
+				rawPreview := string(m.Value)
+				if len(rawPreview) > 200 {
+					rawPreview = rawPreview[:200]
+				}
+				continue
 			}
 
-		case <-ticker.C:
-			if len(batch) > 0 {
-				ig.logger.Info("Flushing partial batch due to timeout",
-					"workerID", workerID,
-					"batchSize", len(batch))
-				flushBatch()
-			}
+			batchTrades = append(batchTrades, trades...)
+			batchMsgs = append(batchMsgs, m)
 
-		case <-ctx.Done():
-			flushBatch()
-			ig.logger.Info("Worker stopped", "workerID", workerID)
-			return
+			// Flush if buffer is full
+			if len(batchTrades) >= ig.cfg.BatchSize {
+				if err := flush(); err != nil {
+					return err
+				}
+			}
 		}
 	}
 }
 
-func (c *Ingester) parseMessage(msg kafka.Message) ([]*models.Trade, error) {
-	// Try single message first (most common case)
-	if trades, err := c.parseProtobufSingle(msg.Value); err == nil {
-		return trades, nil
+// parseMessage unifies Single and Batch proto handling
+func (ig *Ingester) parseMessage(msg kafka.Message) ([]*models.Trade, error) {
+	// Try Single message FIRST (most common case)
+	// Important: Must try single before batch because TradeData field 1 (string id)
+	// and TradeDataBatch field 1 (repeated TradeData) have same wire type,
+	// causing batch parsing to incorrectly "succeed" with garbage data
+	var single pb.TradeData
+	if err := proto.Unmarshal(msg.Value, &single); err == nil && single.Id != "" && single.Exchange != "" {
+		return ig.convertProtoList([]*pb.TradeData{&single})
 	}
 
-	// Try batch message
-	if trades, err := c.parseProtobufBatch(msg.Value); err == nil {
-		return trades, nil
+	// Try Batch message (for scrapers that send batches)
+	var batch pb.TradeDataBatch
+	if err := proto.Unmarshal(msg.Value, &batch); err == nil && len(batch.Trades) > 0 {
+		// Validate first trade has required fields (not garbage)
+		if batch.Trades[0].Id != "" && batch.Trades[0].Exchange != "" {
+			return ig.convertProtoList(batch.Trades)
+		}
 	}
 
-	return nil, fmt.Errorf("failed to parse message")
+	return nil, fmt.Errorf("unknown protobuf format")
 }
 
-func (ig *Ingester) parseProtobufBatch(data []byte) ([]*models.Trade, error) {
-	var batch pb.TradeDataBatch
-	if err := proto.Unmarshal(data, &batch); err != nil {
-		return nil, err
-	}
-
-	if len(batch.Trades) == 0 {
-		return nil, fmt.Errorf("empty batch")
-	}
-
-	// Validate first trade to ensure it's not garbage data
-	if !isValidTradeData(batch.Trades[0]) {
-		return nil, fmt.Errorf("invalid batch data")
-	}
-
-	var trades []*models.Trade
-	for _, td := range batch.Trades {
-		kd := scraper.FromProto(td)
-		trade, err := ig.transformKafkaDataToTrade(kd)
+func (ig *Ingester) convertProtoList(list []*pb.TradeData) ([]*models.Trade, error) {
+	result := make([]*models.Trade, 0, len(list))
+	for _, item := range list {
+		t, err := ig.transform(item)
 		if err != nil {
-			ig.logger.Error("Error transforming trade", "error", err)
+			ig.logger.Warn("Trade validation failed")
 			continue
 		}
-		trades = append(trades, trade)
+		result = append(result, t)
 	}
-
-	if len(trades) == 0 {
-		return nil, fmt.Errorf("no valid trades")
+	if len(result) == 0 {
+		return nil, fmt.Errorf("no valid trades found")
 	}
-
-	return trades, nil
+	return result, nil
 }
 
-func (ig *Ingester) parseProtobufSingle(data []byte) ([]*models.Trade, error) {
-	var singleTrade pb.TradeData
-	if err := proto.Unmarshal(data, &singleTrade); err != nil {
-		return nil, err
+func (ig *Ingester) transform(p *pb.TradeData) (*models.Trade, error) {
+	// Validate required string fields
+	if p.Id == "" || p.Exchange == "" || p.Symbol == "" {
+		return nil, fmt.Errorf("missing required fields: id=%q exchange=%q symbol=%q", p.Id, p.Exchange, p.Symbol)
 	}
 
-	if !isValidTradeData(&singleTrade) {
-		return nil, fmt.Errorf("invalid trade data")
+	// Check for NaN/Inf (telltale signs of corrupted protobuf data)
+	if math.IsNaN(p.Price) || math.IsInf(p.Price, 0) ||
+		math.IsNaN(p.Volume) || math.IsInf(p.Volume, 0) {
+		return nil, fmt.Errorf("corrupted numeric data detected")
 	}
 
-	kd := scraper.FromProto(&singleTrade)
-	trade, err := ig.transformKafkaDataToTrade(kd)
+	// Simple validation: just check for positive values
+	// IRT prices can be very small for cheap coins, and volumes can be very large
+	if p.Price <= 0 {
+		return nil, fmt.Errorf("invalid price: %v", p.Price)
+	}
+
+	if p.Volume <= 0 {
+		return nil, fmt.Errorf("invalid volume: %v", p.Volume)
+	}
+
+	// Fast time parsing (fallback to Now if fails)
+	eventTime, err := time.Parse(time.RFC3339, p.Time)
 	if err != nil {
-		return nil, err
+		fmt.Printf("parse error for %s %s", p.Exchange, p.Time)
+		eventTime = time.Now()
 	}
 
-	return []*models.Trade{trade}, nil
-}
-
-func isValidTradeData(td *pb.TradeData) bool {
-	if td == nil {
-		return false
-	}
-	if td.Id == "" {
-		return false
-	}
-	if td.Exchange == "" {
-		return false
-	}
-	if td.Symbol == "" {
-		return false
-	}
-	if td.Price <= 0 || td.Price > 1e15 {
-		return false
-	}
-	if td.Volume <= 0 || td.Volume > 1e15 {
-		return false
-	}
-	return true
-}
-
-func (ig *Ingester) transformKafkaDataToTrade(kd *scraper.KafkaData) (*models.Trade, error) {
-	eventTime, err := ig.parseTime(kd.Time)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse time '%s': %w", kd.Time, err)
-	}
-
-	trade := &models.Trade{
-		TradeID:     kd.ID,
-		Source:      kd.Exchange,
-		Symbol:      kd.Symbol,
-		Side:        kd.Side,
-		Price:       kd.Price,
-		BaseAmount:  kd.Volume,
-		QuoteAmount: kd.Quantity,
+	return &models.Trade{
+		TradeID:     p.Id,
+		Source:      p.Exchange,
+		Symbol:      p.Symbol,
+		Side:        p.Side,
+		Price:       p.Price,
+		BaseAmount:  p.Volume,
+		QuoteAmount: p.Price * p.Volume,
 		EventTime:   eventTime,
 		InsertedAt:  time.Now(),
-		USDTPrice:   kd.USDTPrice,
-	}
-
-	return trade, nil
-}
-
-func (c *Ingester) parseTime(timeStr string) (time.Time, error) {
-	timeFormats := []string{
-		time.RFC3339,
-		"2006-01-02T15:04:05",
-		"2006-01-02 15:04:05",
-		time.RFC3339Nano,
-	}
-
-	for _, format := range timeFormats {
-		if t, err := time.Parse(format, timeStr); err == nil {
-			return t, nil
-		}
-	}
-
-	return time.Time{}, fmt.Errorf("unable to parse time with any known format")
+		USDTPrice:   p.UsdtPrice,
+	}, nil
 }

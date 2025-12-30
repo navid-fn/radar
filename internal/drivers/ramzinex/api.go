@@ -1,0 +1,137 @@
+package ramzinex
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
+	"nobitex/radar/internal/proto"
+	"nobitex/radar/internal/scraper"
+
+	"github.com/segmentio/kafka-go"
+	"golang.org/x/time/rate"
+)
+
+const tradesAPI = "https://publicapi.ramzinex.com/exchange/api/v1.0/exchange/orderbooks/%d/trades"
+
+type RamzinexAPI struct {
+	sender       *scraper.Sender
+	logger       *slog.Logger
+	pairIDToName map[int]string
+	rateLimiter  *rate.Limiter
+	usdtPrice    float64
+	usdtMu       sync.RWMutex
+}
+
+func NewRamzinexAPIScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *RamzinexAPI {
+	return &RamzinexAPI{
+		sender:       scraper.NewSender(kafkaWriter, logger),
+		logger:       logger.With("scraper", "ramzinex-api"),
+		pairIDToName: make(map[int]string),
+		usdtPrice:    float64(getLatestUSDTPrice()),
+	}
+}
+
+func (r *RamzinexAPI) Name() string { return "ramzinex-api" }
+
+func (r *RamzinexAPI) Run(ctx context.Context) error {
+	r.logger.Info("Starting Ramzinex API scraper")
+
+	pairs, pairMap, err := fetchPairs(r.logger)
+	if err != nil {
+		return err
+	}
+	r.pairIDToName = pairMap
+
+	if len(pairs) == 0 {
+		return fmt.Errorf("no pairs found")
+	}
+
+	optimalRate := min(float64(len(pairs)), 60.0*0.98/60.0)
+	r.rateLimiter = rate.NewLimiter(rate.Limit(optimalRate), 10)
+
+	var wg sync.WaitGroup
+	for _, p := range pairs {
+		wg.Add(1)
+		go func(pair pairDetail) {
+			defer wg.Done()
+			r.pollPair(ctx, pair.ID)
+		}(p)
+	}
+	wg.Wait()
+	return nil
+}
+
+func (r *RamzinexAPI) pollPair(ctx context.Context, pairID int) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		if err := r.rateLimiter.Wait(ctx); err != nil {
+			return
+		}
+
+		if err := r.fetchTrades(ctx, pairID); err != nil {
+			time.Sleep(2 * time.Second)
+		}
+	}
+}
+
+func (r *RamzinexAPI) fetchTrades(ctx context.Context, pairID int) error {
+	resp, err := http.Get(fmt.Sprintf(tradesAPI, pairID))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	var data latestAPIData
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return err
+	}
+
+	pairName := r.pairIDToName[pairID]
+	for _, item := range data.Data {
+		row, ok := item.([]any)
+		if !ok || len(row) < 6 {
+			continue
+		}
+
+		cleanedSymbol := cleanSymbol(strings.ToUpper(pairName))
+		cleanedPrice := cleanPrice(cleanedSymbol, row[0].(float64))
+		volume := row[1].(float64)
+		tradeTime := convertTimeToRFC3339(row[2].(string))
+		side := row[3].(string)
+		id := row[5].(string)
+
+		if cleanedSymbol == "USDT/IRT" {
+			r.usdtMu.Lock()
+			r.usdtPrice = cleanedPrice
+			r.usdtMu.Unlock()
+		}
+
+		trade := &proto.TradeData{
+			Id:        id,
+			Exchange:  "ramzinex",
+			Symbol:    cleanedSymbol,
+			Price:     cleanedPrice,
+			Volume:    volume,
+			Quantity:  cleanedPrice * volume,
+			Side:      side,
+			Time:      tradeTime,
+			UsdtPrice: r.usdtPrice,
+		}
+
+		if err := r.sender.SendTrade(ctx, trade); err != nil {
+			r.logger.Debug("Send error", "error", err)
+		}
+	}
+	return nil
+}

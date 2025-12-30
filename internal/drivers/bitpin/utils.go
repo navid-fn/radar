@@ -2,7 +2,6 @@ package bitpin
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -32,8 +31,7 @@ type ticker struct {
 func getLatestUSDTPrice() float64 {
 	response, err := http.Get("https://api.bitpin.ir/api/v1/mkt/tickers/")
 	if err != nil {
-		fmt.Println("Error calling API")
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Second * 2)
 		return getLatestUSDTPrice()
 	}
 	defer response.Body.Close()

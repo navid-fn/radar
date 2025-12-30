@@ -2,80 +2,89 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"nobitex/radar/configs"
-	// "nobitex/radar/internal/drivers/bitpin"
-	// "nobitex/radar/internal/drivers/coingecko"
-	// "nobitex/radar/internal/drivers/nobitex"
-	// "nobitex/radar/internal/drivers/ramzinex"
-	// "nobitex/radar/internal/drivers/tabdeal"
-	"nobitex/radar/internal/drivers/wallex"
-	"nobitex/radar/internal/scraper"
+	"log/slog"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
+
+	"nobitex/radar/configs"
+	"nobitex/radar/internal/drivers/bitpin"
+	"nobitex/radar/internal/drivers/coingecko"
+	"nobitex/radar/internal/drivers/nobitex"
+	"nobitex/radar/internal/drivers/ramzinex"
+	"nobitex/radar/internal/drivers/tabdeal"
+	"nobitex/radar/internal/drivers/wallex"
+	"nobitex/radar/internal/scraper"
+
+	"github.com/segmentio/kafka-go"
 )
 
 func main() {
-	cfg := configs.Load()
-	if cfg.CoingeckoCfg == nil {
-		panic("coingecko not configed")
+	appConfig := configs.AppLoad()
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+
+	kafkaWriter := &kafka.Writer{
+		Addr:         kafka.TCP(appConfig.KafkaTrade.Broker),
+		Topic:        appConfig.KafkaTrade.Topic,
+		Balancer:     &kafka.LeastBytes{},
+		BatchSize:    100,
+		BatchTimeout: 10 * time.Millisecond,
+		Async:        true,
 	}
-	scrapers := make([]scraper.Scraper, 0)
+	defer kafkaWriter.Close()
 
-	// add new driver here
-	// nobitex scraper
-	// scrapers = append(scrapers, nobitex.NewNobitexScraper(cfg))
-	// scrapers = append(scrapers, nobitex.NewNobitexAPIScraper(cfg))
-	// //
-	// // wallex scraper
-	scrapers = append(scrapers, wallex.NewWallexScraper(cfg))
-	// scrapers = append(scrapers, wallex.NewWallexAPIScraper(cfg))
-	//
-	// // ramzinex scraper
-	// scrapers = append(scrapers, ramzinex.NewRamzinexScraper(cfg))
-	// scrapers = append(scrapers, ramzinex.NewRamzinexAPIScraper(cfg))
-	// //
-	// // tabdeal scraper
-	// scrapers = append(scrapers, tabdeal.NewTabdealScraper(cfg))
-	// //
-	// // bitpin scraper
-	// scrapers = append(scrapers, bitpin.NewBitpinScraper(cfg))
-	// scrapers = append(scrapers, bitpin.NewBitpinAPIScraper(cfg))
-	//
-	// // coingecko scraper
-	// scrapers = append(scrapers, coingecko.NewCoinGeckoScraper(cfg))
-	//
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// Register all scrapers
+	scrapers := []scraper.Scraper{
+		// Nobitex
+		nobitex.NewNobitexScraper(kafkaWriter, logger),
+		nobitex.NewNobitexAPIScraper(kafkaWriter, logger),
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		// Wallex
+		wallex.NewWallexScraper(kafkaWriter, logger),
+		wallex.NewWallexAPIScraper(kafkaWriter, logger),
 
+		// Ramzinex
+		ramzinex.NewRamzinexScraper(kafkaWriter, logger),
+		ramzinex.NewRamzinexAPIScraper(kafkaWriter, logger),
+
+		// Bitpin
+		bitpin.NewBitpinScraper(kafkaWriter, logger),
+		bitpin.NewBitpinAPIScraper(kafkaWriter, logger),
+
+		// Tabdeal
+		tabdeal.NewTabdealScraper(kafkaWriter, logger),
+
+		// CoinGecko
+		coingecko.NewCoinGeckoScraper(kafkaWriter, logger, &appConfig.Coingecko),
+	}
+
+	// Setup graceful shutdown
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// Start all scrapers
 	var wg sync.WaitGroup
-	errs := make(chan error, len(scrapers))
-
-	for _, c := range scrapers {
+	for _, s := range scrapers {
 		wg.Add(1)
-		go func(c scraper.Scraper) {
+		go func(s scraper.Scraper) {
 			defer wg.Done()
-			cfg.Logger.Info("Initialized crawler", "name", c.Name())
-			if err := c.Run(ctx); err != nil {
-				errs <- fmt.Errorf("%s failed: %w", c.Name(), err)
+			logger.Info("Starting scraper", "name", s.Name())
+			if err := s.Run(ctx); err != nil && ctx.Err() == nil {
+				logger.Error("Scraper failed", "name", s.Name(), "error", err)
 			}
-		}(c)
+		}(s)
 	}
 
-	select {
-	case sig := <-sigCh:
-		cfg.Logger.Warn("Received signal, shutting down", "signal", sig)
-		cancel()
-	case err := <-errs:
-		cfg.Logger.Error("A crawler exited with error, shutting down", "error", err)
-		cancel()
-	}
+	// Wait for context cancellation (signal received)
+	<-ctx.Done()
+	logger.Warn("Shutdown signal received, stopping scrapers...")
 
+	// Wait for all scrapers to finish
 	wg.Wait()
-	cfg.Logger.Info("All crawlers stopped. Bye.")
+	logger.Info("All scrapers stopped")
 }
