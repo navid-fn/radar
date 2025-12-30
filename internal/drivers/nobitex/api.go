@@ -17,6 +17,8 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const latestTradeAPI = "https://apiv2.nobitex.ir/v2/trades/"
+
 type NobitexAPI struct {
 	sender      *scraper.Sender
 	logger      *slog.Logger
@@ -82,7 +84,12 @@ func (n *NobitexAPI) pollSymbol(ctx context.Context, symbol string) {
 }
 
 func (n *NobitexAPI) fetchTrades(ctx context.Context, symbol string) error {
-	resp, err := http.Get(latestTradeAPI + symbol)
+	req, err := http.NewRequestWithContext(ctx, "GET", latestTradeAPI+symbol, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := scraper.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -106,7 +113,6 @@ func (n *NobitexAPI) fetchTrades(ctx context.Context, symbol string) error {
 
 		cleanedSymbol := scraper.NormalizeSymbol("nobitex", symbol)
 		cleanedPrice := scraper.NormalizePrice(cleanedSymbol, price)
-
 		tradeTime := scraper.TimestampToRFC3339(t.Time)
 
 		if cleanedSymbol == "USDT/IRT" {

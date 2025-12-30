@@ -4,20 +4,15 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
-	"net/http"
 	"time"
+
+	"nobitex/radar/internal/scraper"
 )
 
 const (
 	pairsAPI     = "https://api.ramzinex.com/exchange/api/v2.0/exchange/pairs"
 	usdtPriceAPI = "https://publicapi.ramzinex.com/exchange/api/v1.0/exchange/orderbooks/11/market_sell_price"
 )
-
-type APIError struct{}
-
-func (e *APIError) Error() string {
-	return "Failed to call api with status failed"
-}
 
 type pairName struct {
 	En string `json:"ramzinex"`
@@ -55,7 +50,7 @@ func convertTimeToRFC3339(timeStr string) string {
 }
 
 func fetchPairs(logger *slog.Logger) ([]pairDetail, map[int]string, error) {
-	resp, err := http.Get(pairsAPI)
+	resp, err := scraper.HTTPClient.Get(pairsAPI)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -79,18 +74,18 @@ func fetchPairs(logger *slog.Logger) ([]pairDetail, map[int]string, error) {
 }
 
 func getLatestUSDTPrice() int64 {
-	response, err := http.Get(usdtPriceAPI)
+	resp, err := scraper.HTTPClient.Get(usdtPriceAPI)
 	if err != nil {
 		return 0
 	}
-	defer response.Body.Close()
+	defer resp.Body.Close()
+
 	type price struct {
 		Data map[string]int64 `json:"data"`
 	}
 	var priceData price
-	if err := json.NewDecoder(response.Body).Decode(&priceData); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&priceData); err != nil {
 		return 0
 	}
-	cleanedPrice := priceData.Data["price"] / 10
-	return cleanedPrice
+	return priceData.Data["price"] / 10
 }

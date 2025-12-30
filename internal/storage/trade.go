@@ -1,24 +1,99 @@
+// Package storage provides database storage implementations for trade data.
 package storage
 
 import (
+	"context"
+	"time"
+
+	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+
 	"nobitex/radar/internal/models"
-	"gorm.io/gorm"
 )
 
+// TradeStorage defines the interface for persisting trade data.
+// Implementations must be safe for concurrent use.
 type TradeStorage interface {
-	CreateTrades([]*models.Trade) error
+	// CreateTrades inserts a batch of trades into the database.
+	// Uses batch insert for optimal ClickHouse performance.
+	CreateTrades(ctx context.Context, trades []*models.Trade) error
+
+	// Close releases database connection resources.
+	Close() error
 }
 
-type gormTradeStorage struct {
-	db *gorm.DB
+// clickhouseStorage implements TradeStorage using native ClickHouse driver.
+// Uses batch inserts for high-throughput data ingestion.
+type clickhouseStorage struct {
+	conn driver.Conn
 }
 
-func NewGormTradeStorage(db *gorm.DB) TradeStorage {
-	return &gormTradeStorage{db: db}
+// NewClickHouseStorage creates a new ClickHouse storage connection.
+// It parses the DSN, opens a connection, and verifies connectivity with a ping.
+// Returns an error if connection cannot be established within 5 seconds.
+func NewClickHouseStorage(dsn string) (TradeStorage, error) {
+	opts, err := clickhouse.ParseDSN(dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := clickhouse.Open(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	// Test connection with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := conn.Ping(ctx); err != nil {
+		return nil, err
+	}
+
+	return &clickhouseStorage{conn: conn}, nil
 }
 
-func (s *gormTradeStorage) CreateTrades(trade []*models.Trade) error {
-	return s.db.Create(trade).Error
+// CreateTrades inserts trades using ClickHouse batch insert.
+// Batch insert is significantly faster than individual inserts for ClickHouse.
+// All trades in the batch share the same inserted_at timestamp.
+func (s *clickhouseStorage) CreateTrades(ctx context.Context, trades []*models.Trade) error {
+	if len(trades) == 0 {
+		return nil
+	}
+
+	batch, err := s.conn.PrepareBatch(ctx, `
+		INSERT INTO trade (
+			trade_id, source, symbol, side, 
+			price, base_amount, quote_amount, usdt_price,
+			event_time, inserted_at
+		)
+	`)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	for _, t := range trades {
+		err := batch.Append(
+			t.TradeID,
+			t.Source,
+			t.Symbol,
+			t.Side,
+			t.Price,
+			t.BaseAmount,
+			t.QuoteAmount,
+			t.USDTPrice,
+			t.EventTime,
+			now,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return batch.Send()
 }
 
-
+// Close closes the ClickHouse connection.
+func (s *clickhouseStorage) Close() error {
+	return s.conn.Close()
+}

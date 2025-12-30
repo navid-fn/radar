@@ -1,3 +1,5 @@
+// Package configs provides application configuration loaded from environment variables.
+// All configuration is externalized via environment variables for 12-factor app compliance.
 package configs
 
 import (
@@ -9,29 +11,54 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// AppConfig holds all application configuration.
+// Load it once at startup using AppLoad().
 type AppConfig struct {
-	DBDSN      string
-	Ingester   IngesterConfig
+	// DBDSN is the ClickHouse connection string.
+	DBDSN string
+
+	// Ingester contains settings for the Kafka-to-ClickHouse ingester.
+	Ingester IngesterConfig
+
+	// KafkaTrade contains Kafka connection settings for trade data.
 	KafkaTrade KafkaTradeConfig
-	Coingecko  CoingeckoConfigs
+
+	// Coingecko contains settings for the CoinGecko scraper.
+	Coingecko CoingeckoConfigs
 }
 
+// KafkaTradeConfig holds Kafka connection settings.
 type KafkaTradeConfig struct {
-	Broker  string
-	Topic   string
+	// Broker is the Kafka broker address (e.g., "localhost:9092").
+	Broker string
+
+	// Topic is the Kafka topic for trade data.
+	Topic string
+
+	// GroupID is the consumer group ID for the ingester.
 	GroupID string
 }
 
+// IngesterConfig holds settings for batch processing.
 type IngesterConfig struct {
-	BatchSize           int
+	// BatchSize is the maximum number of trades to accumulate before flushing.
+	BatchSize int
+
+	// BatchTimeoutSeconds is the maximum seconds to wait before flushing.
 	BatchTimeoutSeconds int
 }
 
+// CoingeckoConfigs holds CoinGecko API scraper settings.
 type CoingeckoConfigs struct {
-	ExchangesID  []string
-	ScheduleHour int // Hour of day to run (0-23), default 0 (midnight)
+	// ExchangesID is a list of CoinGecko exchange IDs to scrape (comma-separated in env).
+	ExchangesID []string
+
+	// ScheduleHour is the hour of day (0-23) to run the daily scrape.
+	// Uses Asia/Tehran timezone. Default: 0 (midnight).
+	ScheduleHour int
 }
 
+// getDatabaseDSN constructs the ClickHouse DSN from environment variables.
 func getDatabaseDSN() string {
 	dbUser := getEnv("CLICKHOUSE_USER", "user")
 	dbPassword := getEnv("CLICKHOUSE_PASSWORD", "password")
@@ -39,26 +66,36 @@ func getDatabaseDSN() string {
 	dbPort := getEnv("CLICKHOUSE_TCP_PORT", "9000")
 	dbName := getEnv("CLICKHOUSE_DB", "db")
 
-	dsn := fmt.Sprintf("clickhouse://%s:%s@%s:%s/%s?dial_timeout=10s&read_timeout=20s", dbUser, dbPassword, dbHost, dbPort, dbName)
-	return dsn
+	return fmt.Sprintf(
+		"clickhouse://%s:%s@%s:%s/%s?dial_timeout=10s&read_timeout=20s",
+		dbUser, dbPassword, dbHost, dbPort, dbName,
+	)
 }
 
+// getCoingeckoConfigs loads CoinGecko settings from environment.
 func getCoingeckoConfigs() CoingeckoConfigs {
 	exchangesID := getEnv("COINGECKO_EXCHANGES", "")
 	var exchanges []string
-	exchanges = strings.Split(exchangesID, ",")
-	scheduleHour := getEnvInt("COINGECKO_SCHEDULE_HOUR", 0) // Default: midnight (0:00)
+	if exchangesID != "" {
+		exchanges = strings.Split(exchangesID, ",")
+	}
+
+	scheduleHour := getEnvInt("COINGECKO_SCHEDULE_HOUR", 0)
 	if scheduleHour < 0 || scheduleHour > 23 {
 		scheduleHour = 0
 	}
+
 	return CoingeckoConfigs{
 		ExchangesID:  exchanges,
 		ScheduleHour: scheduleHour,
 	}
 }
 
+// AppLoad loads all application configuration from environment variables.
+// It attempts to load a .env file first (for local development).
+// Call this once at application startup.
 func AppLoad() *AppConfig {
-	_ = godotenv.Load()
+	_ = godotenv.Load() // Ignore error - .env is optional
 
 	return &AppConfig{
 		KafkaTrade: KafkaTradeConfig{
@@ -75,6 +112,7 @@ func AppLoad() *AppConfig {
 	}
 }
 
+// getEnv returns the environment variable value or a default.
 func getEnv(key, defaultValue string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
@@ -82,6 +120,7 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
+// getEnvInt returns the environment variable as int or a default.
 func getEnvInt(key string, defaultValue int) int {
 	valueStr := getEnv(key, "")
 	if valueStr == "" {

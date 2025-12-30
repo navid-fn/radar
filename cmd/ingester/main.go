@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/segmentio/kafka-go"
-	"gorm.io/driver/clickhouse"
-	"gorm.io/gorm"
 
 	"nobitex/radar/configs"
 	"nobitex/radar/internal/ingester"
@@ -21,12 +19,13 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	appConfig := configs.AppLoad()
 
-	db, err := gorm.Open(clickhouse.Open(appConfig.DBDSN), &gorm.Config{})
+	// Connect to ClickHouse
+	tradeStorage, err := storage.NewClickHouseStorage(appConfig.DBDSN)
 	if err != nil {
-		logger.Error("Failed to connect to DB", "error", err)
+		logger.Error("Failed to connect to ClickHouse", "error", err)
 		os.Exit(1)
 	}
-	tradeStorage := storage.NewGormTradeStorage(db)
+	defer tradeStorage.Close()
 
 	kafkaReader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:        []string{appConfig.KafkaTrade.Broker},

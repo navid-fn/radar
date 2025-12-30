@@ -4,13 +4,16 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
-	"net/http"
 	"sort"
 	"strconv"
-	"time"
+
+	"nobitex/radar/internal/scraper"
 )
 
-const marketsAPI = "https://api.bitpin.ir/api/v1/mkt/markets/"
+const (
+	marketsAPI = "https://api.bitpin.ir/api/v1/mkt/markets/"
+	tickersAPI = "https://api.bitpin.ir/api/v1/mkt/tickers/"
+)
 
 type market struct {
 	Symbol    string `json:"symbol"`
@@ -23,7 +26,7 @@ type ticker struct {
 }
 
 func fetchMarkets(logger *slog.Logger) ([]string, error) {
-	resp, err := http.Get(marketsAPI)
+	resp, err := scraper.HTTPClient.Get(marketsAPI)
 	if err != nil {
 		return nil, err
 	}
@@ -47,14 +50,14 @@ func fetchMarkets(logger *slog.Logger) ([]string, error) {
 }
 
 func getLatestUSDTPrice() float64 {
-	response, err := http.Get("https://api.bitpin.ir/api/v1/mkt/tickers/")
+	resp, err := scraper.HTTPClient.Get(tickersAPI)
 	if err != nil {
-		time.Sleep(time.Second * 2)
-		return getLatestUSDTPrice()
+		return 0
 	}
-	defer response.Body.Close()
+	defer resp.Body.Close()
+
 	var tickersData []ticker
-	if err := json.NewDecoder(response.Body).Decode(&tickersData); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&tickersData); err != nil {
 		return 0
 	}
 	for _, t := range tickersData {
@@ -65,4 +68,3 @@ func getLatestUSDTPrice() float64 {
 	}
 	return 0
 }
-

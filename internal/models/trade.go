@@ -1,31 +1,42 @@
+// Package models defines the domain models used across the application.
 package models
 
-import (
-	"time"
-)
+import "time"
 
+// Trade represents a single trade record in the ClickHouse database.
+// This is the canonical format used for storage, normalized from
+// exchange-specific formats received via Kafka.
 type Trade struct {
-	TradeID     string    `gorm:"column:trade_id;primaryKey" json:"trade_id"`
-	Source      string    `gorm:"column:source;primaryKey" json:"source"`
-	Symbol      string    `gorm:"column:symbol" json:"symbol"`
-	Side        string    `gorm:"column:side" json:"side"`
-	Price       float64   `gorm:"column:price;type:Float64" json:"price"`
-	BaseAmount  float64   `gorm:"column:base_amount;type:Float64" json:"base_amount"`
-	QuoteAmount float64   `gorm:"column:quote_amount;type:Float64" json:"quote_amount"`
-	USDTPrice   float64   `gorm:"column:usdt_price;type:Float64" json:"usdt_price"`
-	EventTime   time.Time `gorm:"column:event_time;type:DateTime('Asia/Tehran')" json:"event_time"`
-	InsertedAt  time.Time `gorm:"column:inserted_at;type:DateTime('Asia/Tehran');default:now()" json:"inserted_at"`
-}
+	// TradeID is a unique identifier for this trade.
+	// Either provided by the exchange or generated via SHA1 hash.
+	TradeID string `json:"trade_id"`
 
-func (Trade) TableName() string {
-	return "trade"
-}
+	// Source is the exchange name (e.g., "nobitex", "wallex").
+	Source string `json:"source"`
 
-func (Trade) TableOptions() string {
-	return `ENGINE = ReplacingMergeTree(event_time) 
-		ORDER BY (source, trade_id)
-		SETTINGS 
-			merge_with_ttl_timeout = 3600,
-			min_rows_for_wide_part = 0,
-			min_bytes_for_wide_part = 0`
+	// Symbol is the normalized trading pair (e.g., "BTC/IRT", "ETH/USDT").
+	Symbol string `json:"symbol"`
+
+	// Side is the trade direction: "buy" or "sell" or "all".
+	Side string `json:"side"`
+
+	// Price is the trade price in quote currency (IRT or USDT).
+	// For IRT pairs, this is in Toman (not Rial).
+	Price float64 `json:"price"`
+
+	// BaseAmount is the quantity of base currency traded.
+	BaseAmount float64 `json:"base_amount"`
+
+	// QuoteAmount is the total value in quote currency (Price * BaseAmount).
+	QuoteAmount float64 `json:"quote_amount"`
+
+	// USDTPrice is the USDT/IRT price at the time of trade.
+	// Used for converting IRT values to USD for analytics.
+	USDTPrice float64 `json:"usdt_price"`
+
+	// EventTime is when the trade occurred on the exchange.
+	EventTime time.Time `json:"event_time"`
+
+	// InsertedAt is when the trade was inserted into our database.
+	InsertedAt time.Time `json:"inserted_at"`
 }

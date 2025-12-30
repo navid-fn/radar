@@ -82,9 +82,14 @@ func (b *BitpinAPI) pollSymbol(ctx context.Context, symbol string) {
 	}
 }
 
-// get latest trades from related API with given symbol
 func (b *BitpinAPI) fetchTrades(ctx context.Context, symbol string) error {
-	resp, err := http.Get(fmt.Sprintf(tradesAPI, symbol))
+	url := fmt.Sprintf(tradesAPI, symbol)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := scraper.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -110,8 +115,6 @@ func (b *BitpinAPI) fetchTrades(ctx context.Context, symbol string) error {
 		volume, _ := strconv.ParseFloat(volumeStr, 64)
 
 		if volume == 0 && price > 0 {
-			// check if quote_amount has value
-			// sometimes the base_amount return 0.00
 			quoteAmountStr, _ := t["quote_amount"].(string)
 			quoteAmount, err := strconv.ParseFloat(quoteAmountStr, 64)
 			if err == nil {
@@ -148,4 +151,3 @@ func (b *BitpinAPI) fetchTrades(ctx context.Context, symbol string) error {
 	}
 	return nil
 }
-

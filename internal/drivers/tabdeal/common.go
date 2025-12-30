@@ -2,9 +2,9 @@ package tabdeal
 
 import (
 	"encoding/json"
-	"fmt"
-	"net/http"
 	"strconv"
+
+	"nobitex/radar/internal/scraper"
 )
 
 const usdtPriceAPI = "https://api-web.tabdeal.org/r/plots/currencies/dynamic-info/"
@@ -25,12 +25,11 @@ type tradesInfo struct {
 }
 
 func getLatestUSDTPrice() float64 {
-	response, err := http.Get(usdtPriceAPI)
+	resp, err := scraper.HTTPClient.Get(usdtPriceAPI)
 	if err != nil {
-		fmt.Println("Error Calling api")
 		return 0
 	}
-	defer response.Body.Close()
+	defer resp.Body.Close()
 
 	type ticker struct {
 		Price string `json:"price"`
@@ -40,10 +39,9 @@ func getLatestUSDTPrice() float64 {
 		Currencies map[string]map[string]ticker `json:"currencies"`
 	}
 	var prices currencies
-	if err := json.NewDecoder(response.Body).Decode(&prices); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&prices); err != nil {
 		return 0
 	}
 	usdtPriceFloat, _ := strconv.ParseFloat(prices.Currencies["USDT"]["IRT"].Price, 64)
 	return usdtPriceFloat
-
 }

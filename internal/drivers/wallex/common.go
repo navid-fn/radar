@@ -2,16 +2,16 @@ package wallex
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
+
+	"nobitex/radar/internal/scraper"
 )
 
-const (
-	marketsAPI       = "https://api.wallex.ir/hector/web/v1/markets"
-	wallexMarketsAPI = "https://api.wallex.ir/hector/web/v1/markets"
-)
+const marketsAPI = "https://api.wallex.ir/hector/web/v1/markets"
 
 type market struct {
 	Symbol  string `json:"symbol"`
@@ -46,14 +46,14 @@ type tradeAPIResponse struct {
 }
 
 func fetchMarkets(logger *slog.Logger) ([]string, error) {
-	resp, err := http.Get(marketsAPI)
+	resp, err := scraper.HTTPClient.Get(marketsAPI)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, err
+		return nil, fmt.Errorf("status %d", resp.StatusCode)
 	}
 
 	var data apiMarketResponse
@@ -73,27 +73,26 @@ func fetchMarkets(logger *slog.Logger) ([]string, error) {
 }
 
 func getLatestUSDTPrice() float64 {
-	resp, err := http.Get(wallexMarketsAPI)
+	resp, err := scraper.HTTPClient.Get(marketsAPI)
 	if err != nil {
-		return getLatestUSDTPrice()
+		return 0
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return getLatestUSDTPrice()
-	}
-
-	var marketAPIresposnse apiMarketResponse
-	if err := json.NewDecoder(resp.Body).Decode(&marketAPIresposnse); err != nil {
 		return 0
 	}
 
-	for _, market := range marketAPIresposnse.Result.Markets {
-		if market.Symbol == "USDTTMN" {
-			price, _ := strconv.ParseFloat(market.Price, 64)
+	var data apiMarketResponse
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return 0
+	}
+
+	for _, m := range data.Result.Markets {
+		if m.Symbol == "USDTTMN" {
+			price, _ := strconv.ParseFloat(m.Price, 64)
 			return price
 		}
 	}
 	return 0
 }
-

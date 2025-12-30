@@ -3,17 +3,17 @@ package nobitex
 import (
 	"encoding/json"
 	"log/slog"
-	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"nobitex/radar/internal/scraper"
 )
 
 const (
-	latestTradeAPI = "https://apiv2.nobitex.ir/v2/trades/"
-	marketAPI      = "https://apiv2.nobitex.ir/market/stats"
-	usdtPriceAPI   = "https://apiv2.nobitex.ir/v3/orderbook/USDTIRT"
+	marketAPI    = "https://apiv2.nobitex.ir/market/stats"
+	usdtPriceAPI = "https://apiv2.nobitex.ir/v3/orderbook/USDTIRT"
 )
 
 type usdtPrice struct {
@@ -43,10 +43,9 @@ type marketDataAPIResponse struct {
 	Stats  map[string]symbolData
 }
 
-
 // fetch tradeable markets to scrape
 func fetchMarkets(logger *slog.Logger) ([]string, error) {
-	resp, err := http.Get(marketAPI)
+	resp, err := scraper.HTTPClient.Get(marketAPI)
 	if err != nil {
 		return nil, err
 	}
@@ -112,17 +111,16 @@ func getTimeValue(m map[string]any, key string) string {
 }
 
 func getLatestUSDTPrice() float64 {
-	response, err := http.Get(usdtPriceAPI)
+	resp, err := scraper.HTTPClient.Get(usdtPriceAPI)
 	if err != nil {
 		return 0
 	}
-	defer response.Body.Close()
+	defer resp.Body.Close()
+
 	var price usdtPrice
-	if err := json.NewDecoder(response.Body).Decode(&price); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&price); err != nil {
 		return 0
 	}
 	usdtPriceFloat, _ := strconv.ParseFloat(price.USDTPrice, 64)
 	return usdtPriceFloat / 10
-
 }
-

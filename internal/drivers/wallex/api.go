@@ -84,7 +84,12 @@ func (w *WallexAPI) pollSymbol(ctx context.Context, symbol string) {
 }
 
 func (w *WallexAPI) fetchTrades(ctx context.Context, symbol string) error {
-	resp, err := http.Get(tradesAPI + "?symbol=" + symbol)
+	req, err := http.NewRequestWithContext(ctx, "GET", tradesAPI+"?symbol="+symbol, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := scraper.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}

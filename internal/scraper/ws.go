@@ -11,50 +11,66 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// WebSocket timeouts
+// WebSocket connection timeouts and limits
 const (
-	wsHandshakeTimeout = 10 * time.Second
-	wsReadTimeout      = 60 * time.Second
-	wsWriteTimeout     = 10 * time.Second
-	wsPingInterval     = 30 * time.Second
-	wsReconnectMin     = 1 * time.Second
-	wsReconnectMax     = 30 * time.Second
+	wsHandshakeTimeout = 10 * time.Second // Maximum time for WebSocket handshake
+	wsReadTimeout      = 60 * time.Second // Maximum time waiting for a message
+	wsWriteTimeout     = 10 * time.Second // Maximum time to write a message
+	wsPingInterval     = 30 * time.Second // How often to send ping frames
+	wsReconnectMin     = 1 * time.Second  // Initial reconnect delay
+	wsReconnectMax     = 30 * time.Second // Maximum reconnect delay (exponential backoff cap)
 )
 
-// WSConfig holds WebSocket connection settings
+// WSConfig holds WebSocket connection settings.
 type WSConfig struct {
-	URL           string
-	Headers       http.Header
-	PingDisabled  bool          // Set true if server sends pings
-	PingInterval  time.Duration // Custom ping interval (0 = default 30s)
-	ReadTimeout   time.Duration // Custom read timeout (0 = default 60s)
+	// URL is the WebSocket endpoint (e.g., "wss://api.exchange.com/ws")
+	URL string
+
+	// Headers are optional HTTP headers for the handshake (e.g., auth tokens)
+	Headers http.Header
+
+	// PingDisabled should be true if the server sends pings (we only need pong)
+	PingDisabled bool
+
+	// PingInterval overrides the default ping interval (30s). Set to 0 for default.
+	PingInterval time.Duration
+
+	// ReadTimeout overrides the default read timeout (60s). Set to 0 for default.
+	ReadTimeout time.Duration
 }
 
-// WSHandler defines callbacks for WebSocket events
+// WSHandler defines callbacks for WebSocket lifecycle events.
+// The driver implements these to handle exchange-specific protocols.
 type WSHandler struct {
-	// OnConnect is called after connection is established (optional)
+	// OnConnect is called immediately after WebSocket connection is established.
+	// Use this for initial handshakes required by the exchange (e.g., auth).
+	// Optional - set to nil if no handshake is needed.
 	OnConnect func(conn *websocket.Conn) error
 
-	// OnSubscribe is called to subscribe to symbols (required for multi-symbol)
+	// OnSubscribe is called to subscribe to market symbols.
+	// The symbols slice contains the markets this worker is responsible for.
+	// Optional - set to nil if subscription happens in OnConnect.
 	OnSubscribe func(conn *websocket.Conn, symbols []string) error
 
-	// OnMessage processes incoming messages and returns data to send to Kafka
-	// Return nil to skip sending, return data to send to Kafka
+	// OnMessage is called for each incoming WebSocket message.
+	// Return serialized protobuf bytes to send to Kafka, or nil to skip.
+	// The driver is responsible for parsing exchange-specific message formats.
 	OnMessage func(conn *websocket.Conn, msg []byte) ([]byte, error)
 }
 
-// WSClient manages a WebSocket connection with auto-reconnect
+// WSClient manages a WebSocket connection with automatic reconnection.
+// It handles connection lifecycle, ping/pong, and forwards messages to Kafka.
 type WSClient struct {
 	config  WSConfig
 	handler WSHandler
 	sender  *Sender
 	logger  *slog.Logger
-	mu      sync.Mutex
+	mu      sync.Mutex // Protects concurrent writes to WebSocket
 }
 
-// NewWSClient creates a new WebSocket client
+// NewWSClient creates a new WebSocket client with the given configuration.
+// Default timeouts are applied if not specified in config.
 func NewWSClient(config WSConfig, handler WSHandler, sender *Sender, logger *slog.Logger) *WSClient {
-	// Apply defaults
 	if config.PingInterval == 0 {
 		config.PingInterval = wsPingInterval
 	}
@@ -70,8 +86,9 @@ func NewWSClient(config WSConfig, handler WSHandler, sender *Sender, logger *slo
 	}
 }
 
-// Run starts the WebSocket connection with auto-reconnect
-// Blocks until context is cancelled
+// Run starts the WebSocket client and blocks until context is cancelled.
+// It automatically reconnects on disconnection with exponential backoff.
+// Returns nil on graceful shutdown (context cancelled).
 func (c *WSClient) Run(ctx context.Context, symbols []string) error {
 	reconnectDelay := wsReconnectMin
 
@@ -84,13 +101,12 @@ func (c *WSClient) Run(ctx context.Context, symbols []string) error {
 
 		err := c.connect(ctx, symbols)
 		if err == nil {
-			reconnectDelay = wsReconnectMin
+			reconnectDelay = wsReconnectMin // Reset on successful connection
 			continue
 		}
 
-		// Don't log if shutting down
 		if ctx.Err() != nil {
-			return nil
+			return nil // Graceful shutdown
 		}
 
 		c.logger.Warn("WebSocket disconnected, reconnecting",
@@ -104,7 +120,7 @@ func (c *WSClient) Run(ctx context.Context, symbols []string) error {
 		case <-time.After(reconnectDelay):
 		}
 
-		// Exponential backoff
+		// Exponential backoff with cap
 		reconnectDelay *= 2
 		if reconnectDelay > wsReconnectMax {
 			reconnectDelay = wsReconnectMax
@@ -112,7 +128,7 @@ func (c *WSClient) Run(ctx context.Context, symbols []string) error {
 	}
 }
 
-// connect establishes a single WebSocket connection
+// connect establishes a single WebSocket connection and runs until disconnection.
 func (c *WSClient) connect(ctx context.Context, symbols []string) error {
 	dialer := websocket.Dialer{HandshakeTimeout: wsHandshakeTimeout}
 
@@ -124,17 +140,14 @@ func (c *WSClient) connect(ctx context.Context, symbols []string) error {
 
 	c.logger.Info("WebSocket connected", "url", c.config.URL)
 
-	// Setup ping/pong
 	conn.SetPongHandler(func(string) error { return nil })
 
-	// OnConnect callback
 	if c.handler.OnConnect != nil {
 		if err := c.handler.OnConnect(conn); err != nil {
 			return fmt.Errorf("onConnect failed: %w", err)
 		}
 	}
 
-	// Subscribe to symbols
 	if c.handler.OnSubscribe != nil && len(symbols) > 0 {
 		if err := c.handler.OnSubscribe(conn, symbols); err != nil {
 			return fmt.Errorf("subscribe failed: %w", err)
@@ -144,13 +157,14 @@ func (c *WSClient) connect(ctx context.Context, symbols []string) error {
 	return c.readLoop(ctx, conn)
 }
 
-// readLoop handles reading messages and sending pings
+// readLoop is the main message processing loop.
+// It reads messages, processes them via OnMessage, and sends results to Kafka.
+// Also handles sending ping frames if not disabled.
 func (c *WSClient) readLoop(ctx context.Context, conn *websocket.Conn) error {
-	// Message channel
 	messages := make(chan []byte, 100)
 	readErr := make(chan error, 1)
 
-	// Reader goroutine
+	// Spawn reader goroutine (blocking reads can't be cancelled)
 	go func() {
 		defer close(messages)
 		for {
@@ -171,7 +185,7 @@ func (c *WSClient) readLoop(ctx context.Context, conn *websocket.Conn) error {
 		}
 	}()
 
-	// Ping ticker (if enabled)
+	// Setup ping ticker if needed
 	var pingTicker *time.Ticker
 	var pingChan <-chan time.Time
 	if !c.config.PingDisabled {
@@ -180,7 +194,6 @@ func (c *WSClient) readLoop(ctx context.Context, conn *websocket.Conn) error {
 		pingChan = pingTicker.C
 	}
 
-	// Main loop
 	for {
 		select {
 		case <-ctx.Done():
@@ -218,7 +231,8 @@ func (c *WSClient) readLoop(ctx context.Context, conn *websocket.Conn) error {
 	}
 }
 
-// WriteJSON sends a JSON message (thread-safe)
+// WriteJSON sends a JSON message to the WebSocket connection.
+// Thread-safe - can be called from OnMessage handler.
 func (c *WSClient) WriteJSON(conn *websocket.Conn, v any) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -226,7 +240,9 @@ func (c *WSClient) WriteJSON(conn *websocket.Conn, v any) error {
 	return conn.WriteJSON(v)
 }
 
-// RunWorkers runs multiple WebSocket workers for chunked symbols
+// RunWorkers starts multiple WebSocket workers, one per symbol chunk.
+// Use this when an exchange limits subscriptions per connection.
+// Workers are started with 2-second stagger to avoid rate limiting.
 func RunWorkers(
 	ctx context.Context,
 	symbolChunks [][]string,
@@ -250,7 +266,7 @@ func RunWorkers(
 			}
 		}(i, chunk)
 
-		// Stagger worker starts
+		// Stagger worker starts to avoid rate limiting
 		if i < len(symbolChunks)-1 {
 			time.Sleep(2 * time.Second)
 		}
@@ -258,7 +274,3 @@ func RunWorkers(
 
 	wg.Wait()
 }
-
-
-
-

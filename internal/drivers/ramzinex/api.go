@@ -86,7 +86,13 @@ func (r *RamzinexAPI) pollPair(ctx context.Context, pairID int) {
 }
 
 func (r *RamzinexAPI) fetchTrades(ctx context.Context, pairID int) error {
-	resp, err := http.Get(fmt.Sprintf(tradesAPI, pairID))
+	url := fmt.Sprintf(tradesAPI, pairID)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := scraper.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}

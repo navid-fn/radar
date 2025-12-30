@@ -105,7 +105,12 @@ func (t *TabdealAPI) pollSymbol(ctx context.Context, symbol string) {
 func (t *TabdealAPI) fetchTrades(ctx context.Context, symbol string) error {
 	url := fmt.Sprintf("%s?symbol=%s&limit=%d", tradesURL, symbol, limit)
 
-	resp, err := http.Get(url)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := scraper.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -164,7 +169,7 @@ func (t *TabdealAPI) fetchTrades(ctx context.Context, symbol string) error {
 }
 
 func (t *TabdealAPI) fetchMarkets() ([]string, error) {
-	resp, err := http.Get(marketsURL)
+	resp, err := scraper.HTTPClient.Get(marketsURL)
 	if err != nil {
 		return nil, err
 	}

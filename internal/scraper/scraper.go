@@ -1,3 +1,5 @@
+// Package scraper provides core types and utilities for building exchange scrapers.
+// It includes interfaces, Kafka message sending, and common helper functions.
 package scraper
 
 import (
@@ -6,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/segmentio/kafka-go"
@@ -14,24 +17,38 @@ import (
 	pb "nobitex/radar/internal/proto"
 )
 
-// Scraper is the interface all scrapers must implement
+// HTTPClient is a shared HTTP client with timeout for all scrapers.
+// Using a shared client enables connection pooling and prevents resource leaks.
+// Timeout is set to 10 seconds to prevent hanging on unresponsive APIs.
+var HTTPClient = &http.Client{
+	Timeout: 10 * time.Second,
+}
+
+// Scraper is the interface that all exchange scrapers must implement.
+// Each scraper runs in its own goroutine and publishes trades to Kafka.
 type Scraper interface {
+	// Run starts the scraper and blocks until context is cancelled.
+	// It should handle reconnection and error recovery internally.
 	Run(ctx context.Context) error
+
+	// Name returns a unique identifier for this scraper (e.g., "nobitex-ws").
 	Name() string
 }
 
-// Sender handles sending trades to Kafka
+// Sender handles serializing and sending trade data to Kafka.
+// It wraps a kafka.Writer with protobuf serialization.
 type Sender struct {
 	writer *kafka.Writer
 	logger *slog.Logger
 }
 
-// NewSender creates a new Kafka sender
+// NewSender creates a new Kafka sender with the given writer and logger.
 func NewSender(writer *kafka.Writer, logger *slog.Logger) *Sender {
 	return &Sender{writer: writer, logger: logger}
 }
 
-// Send sends raw bytes to Kafka
+// Send sends raw bytes to Kafka with a 5-second timeout.
+// Returns nil if context was cancelled (graceful shutdown).
 func (s *Sender) Send(ctx context.Context, data []byte) error {
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -43,7 +60,8 @@ func (s *Sender) Send(ctx context.Context, data []byte) error {
 	return nil
 }
 
-// SendTrade serializes and sends a single trade
+// SendTrade serializes a single trade to protobuf and sends it to Kafka.
+// Use this for API scrapers that fetch one trade at a time.
 func (s *Sender) SendTrade(ctx context.Context, trade *pb.TradeData) error {
 	data, err := proto.Marshal(trade)
 	if err != nil {
@@ -52,7 +70,8 @@ func (s *Sender) SendTrade(ctx context.Context, trade *pb.TradeData) error {
 	return s.Send(ctx, data)
 }
 
-// SendTrades serializes and sends multiple trades as a batch
+// SendTrades serializes multiple trades as a TradeDataBatch and sends to Kafka.
+// Use this for WebSocket scrapers that receive multiple trades per message.
 func (s *Sender) SendTrades(ctx context.Context, trades []*pb.TradeData) error {
 	data, err := proto.Marshal(&pb.TradeDataBatch{Trades: trades})
 	if err != nil {
@@ -61,15 +80,18 @@ func (s *Sender) SendTrades(ctx context.Context, trades []*pb.TradeData) error {
 	return s.Send(ctx, data)
 }
 
-// GenerateTradeID creates a unique ID for a trade based on its properties
+// GenerateTradeID creates a deterministic unique ID for a trade.
+// Used when the exchange doesn't provide a trade ID.
+// The ID is a SHA1 hash of: exchange-symbol-time-price-volume-side
 func GenerateTradeID(exchange, symbol, tradeTime string, price, volume float64, side string) string {
 	unique := fmt.Sprintf("%s-%s-%s-%f-%f-%s", exchange, symbol, tradeTime, price, volume, side)
 	hash := sha1.Sum([]byte(unique))
 	return hex.EncodeToString(hash[:])
 }
 
-// ChunkSlice splits a slice into chunks of specified size
-// its good to split market for connecting to websocket
+// ChunkSlice splits a slice into chunks of the specified size.
+// Useful for distributing symbols across multiple WebSocket connections
+// when exchanges limit subscriptions per connection.
 func ChunkSlice[T any](items []T, size int) [][]T {
 	if size < 1 {
 		panic("ChunkSlice: size must be greater than 0")
@@ -90,7 +112,8 @@ func ChunkSlice[T any](items []T, size int) [][]T {
 	return chunks
 }
 
-// TimestampToRFC3339 converts millisecond timestamp to RFC3339 string
+// TimestampToRFC3339 converts a Unix millisecond timestamp to RFC3339 string.
+// Used for normalizing trade timestamps from different exchange formats.
 func TimestampToRFC3339(ms int64) string {
 	return time.UnixMilli(ms).UTC().Format(time.RFC3339)
 }
