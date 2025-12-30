@@ -96,18 +96,9 @@ func getStringValue(m map[string]any, key string) string {
 
 func getTimeValue(m map[string]any, key string) string {
 	if v, ok := m[key]; ok {
-		switch val := v.(type) {
-		case string:
-			return val
-		case float64:
-			t := time.UnixMilli(int64(val))
-			return t.Format(time.RFC3339)
-		case int64:
-			t := time.UnixMilli(val)
-			return t.Format(time.RFC3339)
-		}
+		return scraper.AnyToRFC3339(v)
 	}
-	return time.Now().Format(time.RFC3339)
+	return time.Now().UTC().Format(time.RFC3339)
 }
 
 func getLatestUSDTPrice() float64 {

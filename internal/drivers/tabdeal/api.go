@@ -54,9 +54,8 @@ func (t *TabdealAPI) Run(ctx context.Context) error {
 		return fmt.Errorf("no symbols found")
 	}
 
-	optimalRate := min(float64(len(symbols)), 60.0*0.9/60.0)
-	t.rateLimiter = rate.NewLimiter(rate.Limit(optimalRate), 5)
-	t.logger.Info("Rate limiter configured", "rate", optimalRate, "symbols", len(symbols))
+	t.rateLimiter = scraper.DefaultRateLimiter()
+	t.logger.Info("Rate limiter configured", "symbols", len(symbols))
 
 	var wg sync.WaitGroup
 	for _, sym := range symbols {

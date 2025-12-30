@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/segmentio/kafka-go"
+	"golang.org/x/time/rate"
 	"google.golang.org/protobuf/proto"
 
 	pb "nobitex/radar/internal/proto"
@@ -47,7 +48,7 @@ func NewSender(writer *kafka.Writer, logger *slog.Logger) *Sender {
 	return &Sender{writer: writer, logger: logger}
 }
 
-// Send sends raw bytes to Kafka with a 5-second timeout.
+// Send sends raw bytes to Kafka.
 // Returns nil if context was cancelled (graceful shutdown).
 func (s *Sender) Send(ctx context.Context, data []byte) error {
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -116,4 +117,56 @@ func ChunkSlice[T any](items []T, size int) [][]T {
 // Used for normalizing trade timestamps from different exchange formats.
 func TimestampToRFC3339(ms int64) string {
 	return time.UnixMilli(ms).UTC().Format(time.RFC3339)
+}
+
+// FloatTimestampToRFC3339 converts a Unix timestamp (seconds with optional decimals) to RFC3339.
+// Handles float timestamps like 1703123456.789 where decimals are sub-second precision.
+// Used for APIs that return timestamps as float64 (e.g., bitpin).
+func FloatTimestampToRFC3339(ts float64) string {
+	sec := int64(ts)
+	nsec := int64((ts - float64(sec)) * 1e9)
+	return time.Unix(sec, nsec).UTC().Format(time.RFC3339)
+}
+
+// ParseTimeToRFC3339 parses a time string with the given layout and returns RFC3339.
+// Falls back to current time if parsing fails.
+// Common layouts: "2006-01-02 15:04:05", time.RFC3339, etc.
+func ParseTimeToRFC3339(layout, timeStr string) string {
+	t, err := time.Parse(layout, timeStr)
+	if err != nil {
+		return time.Now().UTC().Format(time.RFC3339)
+	}
+	return t.UTC().Format(time.RFC3339)
+}
+
+// AnyToRFC3339 converts various time formats to RFC3339.
+// Handles: string (returns as-is), float64/int64 (treats as milliseconds).
+// Used for WebSocket messages where time format varies.
+func AnyToRFC3339(v any) string {
+	switch val := v.(type) {
+	case string:
+		return val
+	case float64:
+		return time.UnixMilli(int64(val)).UTC().Format(time.RFC3339)
+	case int64:
+		return time.UnixMilli(val).UTC().Format(time.RFC3339)
+	}
+	return time.Now().UTC().Format(time.RFC3339)
+}
+
+// NewRateLimiter creates a rate limiter for API scrapers.
+// Default is 60 requests/minute (standard for most exchanges).
+// Uses 95% of limit as safety margin to avoid hitting rate limit errors.
+// Burst allows catching up after idle periods.
+func NewRateLimiter(requestsPerMinute int) *rate.Limiter {
+	const safetyMargin = 0.95
+	rps := float64(requestsPerMinute) * safetyMargin / 60.0
+	burst := max(1, requestsPerMinute/10) // 10% of limit as burst
+	return rate.NewLimiter(rate.Limit(rps), burst)
+}
+
+// DefaultRateLimiter creates a rate limiter for 60 requests/minute APIs.
+// This is the standard limit for most Iranian exchanges.
+func DefaultRateLimiter() *rate.Limiter {
+	return NewRateLimiter(60)
 }

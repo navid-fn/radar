@@ -48,9 +48,8 @@ func (w *WallexAPI) Run(ctx context.Context) error {
 		return fmt.Errorf("no symbols found")
 	}
 
-	optimalRate := min(float64(len(symbols)), 60.0*0.98/60.0)
-	w.rateLimiter = rate.NewLimiter(rate.Limit(optimalRate), 10)
-	w.logger.Info("Rate limiter configured", "rate", optimalRate, "symbols", len(symbols))
+	w.rateLimiter = scraper.DefaultRateLimiter()
+	w.logger.Info("Rate limiter configured", "symbols", len(symbols))
 
 	var wg sync.WaitGroup
 	for _, sym := range symbols {

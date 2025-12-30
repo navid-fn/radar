@@ -48,9 +48,8 @@ func (n *NobitexAPI) Run(ctx context.Context) error {
 		return fmt.Errorf("no symbols found")
 	}
 
-	optimalRate := min(float64(len(symbols)), 60.0*0.9/60.0)
-	n.rateLimiter = rate.NewLimiter(rate.Limit(optimalRate), 10)
-	n.logger.Info("Rate limiter configured", "rate", optimalRate, "symbols", len(symbols))
+	n.rateLimiter = scraper.DefaultRateLimiter()
+	n.logger.Info("Rate limiter configured", "symbols", len(symbols))
 
 	var wg sync.WaitGroup
 	for _, sym := range symbols {

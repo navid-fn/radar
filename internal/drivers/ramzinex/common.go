@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
-	"time"
 
 	"nobitex/radar/internal/scraper"
 )
@@ -40,14 +39,8 @@ type latestAPIData struct {
 	Status int   `json:"status"`
 }
 
-// convertTimeToRFC3339 converts ramzinex time format "2006-01-02 15:04:05" to RFC3339
-func convertTimeToRFC3339(timeStr string) string {
-	t, err := time.Parse("2006-01-02 15:04:05", timeStr)
-	if err != nil {
-		return time.Now().UTC().Format(time.RFC3339)
-	}
-	return t.UTC().Format(time.RFC3339)
-}
+// ramzinex uses "2006-01-02 15:04:05" format
+const ramzinexTimeLayout = "2006-01-02 15:04:05"
 
 func fetchPairs(logger *slog.Logger) ([]pairDetail, map[int]string, error) {
 	resp, err := scraper.HTTPClient.Get(pairsAPI)

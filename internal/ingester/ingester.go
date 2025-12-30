@@ -125,7 +125,11 @@ func (ig *Ingester) Start(ctx context.Context) error {
 					return nil
 				}
 				ig.logger.Error("Kafka Fetch Error", "error", err)
-				time.Sleep(time.Second)
+				select {
+				case <-ctx.Done():
+					return flush()
+				case <-time.After(time.Second):
+				}
 				continue
 			}
 
@@ -176,7 +180,7 @@ func (ig *Ingester) convertProtoList(list []*pb.TradeData) ([]*models.Trade, err
 	for _, item := range list {
 		t, err := ig.transform(item)
 		if err != nil {
-			ig.logger.Warn("Trade validation failed")
+			ig.logger.Warn("Trade validation failed", "error", err, "id", item.Id, "exchange", item.Exchange)
 			continue
 		}
 		result = append(result, t)

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"math"
 	"net/http"
 	"strconv"
 	"sync"
@@ -49,8 +48,7 @@ func (b *BitpinAPI) Run(ctx context.Context) error {
 		return fmt.Errorf("no symbols found")
 	}
 
-	optimalRate := min(float64(len(symbols)), 60.0*0.98/60.0)
-	b.rateLimiter = rate.NewLimiter(rate.Limit(optimalRate), 10)
+	b.rateLimiter = scraper.DefaultRateLimiter()
 
 	var wg sync.WaitGroup
 	for _, sym := range symbols {
@@ -122,9 +120,7 @@ func (b *BitpinAPI) fetchTrades(ctx context.Context, symbol string) error {
 			}
 		}
 
-		sec, dec := math.Modf(timestamp)
-		tradeTime := time.Unix(int64(sec), int64(dec*1e9))
-
+		tradeTime := scraper.FloatTimestampToRFC3339(timestamp)
 		cleanedSymbol := scraper.NormalizeSymbol("bitpin", symbol)
 
 		if cleanedSymbol == "USDT/IRT" {
@@ -141,7 +137,7 @@ func (b *BitpinAPI) fetchTrades(ctx context.Context, symbol string) error {
 			Volume:    volume,
 			Quantity:  volume * price,
 			Side:      side,
-			Time:      tradeTime.Format(time.RFC3339),
+			Time:      tradeTime,
 			UsdtPrice: b.usdtPrice,
 		}
 

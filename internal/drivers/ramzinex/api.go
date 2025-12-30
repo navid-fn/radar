@@ -52,8 +52,7 @@ func (r *RamzinexAPI) Run(ctx context.Context) error {
 		return fmt.Errorf("no pairs found")
 	}
 
-	optimalRate := min(float64(len(pairs)), 60.0*0.98/60.0)
-	r.rateLimiter = rate.NewLimiter(rate.Limit(optimalRate), 10)
+	r.rateLimiter = scraper.DefaultRateLimiter()
 
 	var wg sync.WaitGroup
 	for _, p := range pairs {
@@ -113,7 +112,7 @@ func (r *RamzinexAPI) fetchTrades(ctx context.Context, pairID int) error {
 		cleanedSymbol := scraper.NormalizeSymbol("ramzinex", strings.ToUpper(pairName))
 		cleanedPrice := scraper.NormalizePrice(cleanedSymbol, row[0].(float64))
 		volume := row[1].(float64)
-		tradeTime := convertTimeToRFC3339(row[2].(string))
+		tradeTime := scraper.ParseTimeToRFC3339(ramzinexTimeLayout, row[2].(string))
 		side := row[3].(string)
 		id := row[5].(string)
 
