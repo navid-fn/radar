@@ -1,72 +1,165 @@
-# Main Purpose of Project
+# Radar
 
-We want to check the market and find our place in Exchange market.
-by scarping latest_trades of each exchange and getting international data, we will find sum of volumes(IRT and USDT), count of trades, etc.
-this will help us to compare each exchanges and decide which currency we should focus
+A trade data collection pipeline for Iranian cryptocurrency exchanges.
 
-# Project Layout:
+## What It Does
 
-[https://github.com/golang-standards/project-layout]
+Radar scrapes real-time trade data from multiple exchanges and stores it in ClickHouse for analysis. It helps compare trading volumes, trade counts, and market activity across exchanges.
 
-# Best Practices
+**Supported Exchanges:**
+- Nobitex (WebSocket + API)
+- Wallex (WebSocket + API)
+- Ramzinex (WebSocket + API)
+- Bitpin (WebSocket + API)
+- Tabdeal (API)
+- CoinGecko (API - for international data)
 
-[https://google.github.io/styleguide/go/best-practices]
+## Architecture
 
-# we will have a two main app:
+```
+┌──────────────┐     ┌─────────┐     ┌────────────┐     ┌────────────┐
+│   Scrapers   │ --> │  Kafka  │ --> │  Ingester  │ --> │ ClickHouse │
+│ (WS + API)   │     │         │     │            │     │            │
+└──────────────┘     └─────────┘     └────────────┘     └────────────┘
+```
 
-1. scraper
-2. ingester
+- **Scrapers**: Connect to exchanges, normalize data, send to Kafka
+- **Kafka**: Message buffer between scrapers and ingester
+- **Ingester**: Batches trades and inserts into ClickHouse
+- **ClickHouse**: Stores trades with deduplication
 
-# for scraper:
+## Quick Start
 
-1. Kafka connection
-2. function to fetch available markets
-3. chunk the markets so each worker only scrap that markets
-4. fetch data from the endpoint(websocket or API)
+### Prerequisites
 
-## dependency injections
+- Go 1.21+
+- Docker & Docker Compose
+- Make (optional)
 
-1. Queue connection (we may change to another thing and its good for testing)
-2. Basic Scrapper so that each of them must have some functions
+### 1. Start Infrastructure
 
-# for ingester:
+```bash
+docker-compose up -d kafka clickhouse
+```
 
-1. Kafka connection
-2. Database Connection
-3. Number of workers
-4. Bach the result TO prevent heavy hit on database
-5. some mechanism to prevent insertion of repeated data
+### 2. Configure
 
-- note: for binance and trending api will be little different from our default scraper
+```bash
+cp env.example .env
+# Edit .env with your settings
+```
 
-What we want to do in project?
+### 3. Run Migrations
 
-## websockets
+```bash
+go run cmd/migrate/main.go
+```
 
-based on the document of each exchange, configure our scraper to check how many connection we allowed
-to have and how many market we allow to pass in websocket.
+### 4. Start Services
 
-## API
+```bash
+# Terminal 1: Start scraper
+go run cmd/scraper/main.go
 
-respect the API rate limit and its main purpose is to fill gaps if websocket connection lost
+# Terminal 2: Start ingester
+go run cmd/ingester/main.go
+```
 
-# problems
+## Configuration
 
-1. we need some metrics to check how stable is connections
-2. place to check our logs
-3. we need to close some connections, because some of the exchanges may not have any trades(closed) but fetchMarket dont say it
-4. mechanism to prevent repeated data. now we are using the ReplacingMergeTree on ClickHouse
-5. how we want to run it in production level. (DockerFile for each driver?)
-6. we have to clean "symbol" so that we have same symbol for comparing
-7. USDT/IRT rate for each trade (accuracy is not important)
-8. Validation of data we are collecting or filling gap if something happened to our scraper (maybe use OHLC and live trading)
-9. (we can think about it later) have a command to auto generate a basic driver to prevent duplication or complexity
+All config is via environment variables:
 
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KAFKA_BROKER` | localhost:9092 | Kafka broker address |
+| `KAFKA_TRADE_TOPIC` | radar_trades | Topic for trade data |
+| `CLICKHOUSE_HOST` | localhost | ClickHouse host |
+| `CLICKHOUSE_TCP_PORT` | 9000 | ClickHouse port |
+| `BATCH_SIZE` | 200 | Ingester batch size |
 
+See `env.example` for full list.
 
-# checks
+## Project Structure
 
-1. checks we can get trade data history from api
-2. mechanis of normalize and pars into driver part
-3. input and output of data kafka from json to proto
-4. add ohlc to our data
+```
+cmd/
+├── scraper/      # Main scraper application
+├── ingester/     # Kafka to ClickHouse ingester
+└── migrate/      # Database migrations
+
+internal/
+├── drivers/      # Exchange-specific scrapers
+│   ├── nobitex/
+│   ├── wallex/
+│   ├── ramzinex/
+│   ├── bitpin/
+│   ├── tabdeal/
+│   └── coingecko/
+├── scraper/      # Shared scraper utilities
+├── ingester/     # Ingester logic
+├── storage/      # ClickHouse storage
+├── models/       # Data models
+└── proto/        # Protobuf definitions
+```
+
+## Adding a New Driver
+
+1. Create a new folder: `internal/drivers/myexchange/`
+
+2. Create these files:
+
+```
+internal/drivers/myexchange/
+├── common.go    # Shared types, fetchMarkets(), getLatestUSDTPrice()
+├── ws.go        # WebSocket scraper (if available)
+└── api.go       # API scraper
+```
+
+3. Implement the `scraper.Scraper` interface:
+
+```go
+type Scraper interface {
+    Run(ctx context.Context) error
+    Name() string
+}
+```
+
+4. Register in `cmd/scraper/main.go`:
+
+```go
+scrapers := []scraper.Scraper{
+    // ... existing scrapers
+    myexchange.NewMyExchangeScraper(kafkaWriter, logger),
+}
+```
+
+5. Add symbol normalization rules in `internal/scraper/normalizer.go`:
+
+```go
+var DefaultSymbolRules = map[string][]SymbolRule{
+    // ... existing rules
+    "myexchange": {
+        {Suffix: "TMN", Replacement: "/IRT"},
+        {Suffix: "USDT", Replacement: "/USDT"},
+    },
+}
+```
+
+## Data Format
+
+All trades are normalized to:
+
+| Field | Description |
+|-------|-------------|
+| `trade_id` | Unique ID from exchange or generated |
+| `source` | Exchange name |
+| `symbol` | Normalized pair (e.g., `BTC/IRT`) |
+| `side` | `buy`, `sell`, or `all` |
+| `price` | Price in quote currency (Toman for IRT) |
+| `base_amount` | Quantity traded |
+| `usdt_price` | USDT/IRT rate at trade time |
+
+## License
+
+MIT
+

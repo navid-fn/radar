@@ -35,6 +35,7 @@ func main() {
 		BatchSize:    100,
 		BatchTimeout: 10 * time.Millisecond,
 		Async:        true,
+		Compression:  kafka.Zstd,
 	}
 	defer kafkaWriter.Close()
 
