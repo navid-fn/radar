@@ -7,6 +7,7 @@ A trade data collection pipeline for Iranian cryptocurrency exchanges.
 Radar scrapes real-time trade data from multiple exchanges and stores it in ClickHouse for analysis. It helps compare trading volumes, trade counts, and market activity across exchanges.
 
 **Supported Exchanges:**
+
 - Nobitex (WebSocket + API)
 - Wallex (WebSocket + API)
 - Ramzinex (WebSocket + API)
@@ -34,12 +35,17 @@ Radar scrapes real-time trade data from multiple exchanges and stores it in Clic
 
 - Go 1.21+
 - Docker & Docker Compose
-- Make (optional)
 
 ### 1. Start Infrastructure
 
 ```bash
-docker-compose up -d kafka clickhouse
+docker compose up -d kafka clickhouse metabase postgres
+```
+
+Or start whole project with docker compose
+
+```bash
+docker compose up -d
 ```
 
 ### 2. Configure
@@ -69,13 +75,13 @@ go run cmd/ingester/main.go
 
 All config is via environment variables:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `KAFKA_BROKER` | localhost:9092 | Kafka broker address |
-| `KAFKA_TRADE_TOPIC` | radar_trades | Topic for trade data |
-| `CLICKHOUSE_HOST` | localhost | ClickHouse host |
-| `CLICKHOUSE_TCP_PORT` | 9000 | ClickHouse port |
-| `BATCH_SIZE` | 200 | Ingester batch size |
+| Variable              | Default        | Description          |
+| --------------------- | -------------- | -------------------- |
+| `KAFKA_BROKER`        | localhost:9092 | Kafka broker address |
+| `KAFKA_TRADE_TOPIC`   | radar_trades   | Topic for trade data |
+| `CLICKHOUSE_HOST`     | localhost      | ClickHouse host      |
+| `CLICKHOUSE_TCP_PORT` | 9000           | ClickHouse port      |
+| `BATCH_SIZE`          | 200            | Ingester batch size  |
 
 See `env.example` for full list.
 
@@ -149,17 +155,16 @@ var DefaultSymbolRules = map[string][]SymbolRule{
 
 All trades are normalized to:
 
-| Field | Description |
-|-------|-------------|
-| `trade_id` | Unique ID from exchange or generated |
-| `source` | Exchange name |
-| `symbol` | Normalized pair (e.g., `BTC/IRT`) |
-| `side` | `buy`, `sell`, or `all` |
-| `price` | Price in quote currency (Toman for IRT) |
-| `base_amount` | Quantity traded |
-| `usdt_price` | USDT/IRT rate at trade time |
+| Field         | Description                             |
+| ------------- | --------------------------------------- |
+| `trade_id`    | Unique ID from exchange or generated    |
+| `source`      | Exchange name                           |
+| `symbol`      | Normalized pair (e.g., `BTC/IRT`)       |
+| `side`        | `buy`, `sell`, or `all`                 |
+| `price`       | Price in quote currency (Toman for IRT) |
+| `base_amount` | Quantity traded                         |
+| `usdt_price`  | USDT/IRT rate at trade time             |
 
 ## License
 
 MIT
-
