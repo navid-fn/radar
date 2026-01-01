@@ -11,7 +11,10 @@ import (
 	"nobitex/radar/internal/scraper"
 )
 
-const marketsAPI = "https://api.wallex.ir/hector/web/v1/markets"
+const (
+	marketsAPI = "https://api.wallex.ir/hector/web/v1/markets"
+	ohlcAPI = "https://api.wallex.ir/v1/udf/history?symbol=%s&resolution=D&from=%d&to=%d"
+)
 
 type market struct {
 	Symbol  string `json:"symbol"`

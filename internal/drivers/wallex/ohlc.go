@@ -1,19 +1,46 @@
-// Package nobitex provides scrapers for Nobitex exchange.
 // This file implements OHLC (candlestick) data scraping.
-// API Doc: https://apidocs.nobitex.ir/#6ae2dae4a2
+// API Doc: https://api.wallex.ir/v1/udf/history
 //
 // Response format:
+// {
+// "s": "ok",
+// "t": [
 //
-//	{
-//	  "s": "ok",
-//	  "t": [1562095800, 1562182200],
-//	  "o": [146272500, 150551000],
-//	  "h": [155869600, 161869500],
-//	  "l": [140062400, 150551000],
-//	  "c": [151440200, 157000000],
-//	  "v": [18.221362316, 9.8592626506]
+//	  1733425200,
+//	  1733428800
+//	],
+//
+// "c": [
+//
+//	  "7209722048.0000000000000000",
+//	  "7235725819.0000000000000000"
+//	],
+//
+// "o": [
+//
+//	  "7286137604.0000000000000000",
+//	  "7200151050.0000000000000000"
+//	],
+//
+// "h": [
+//
+//	  "7286137604.0000000000000000",
+//	  "7235725819.0000000000000000"
+//	],
+//
+// "l": [
+//
+//	  "7209722048.0000000000000000",
+//	  "7150000001.0000000000000000"
+//	],
+//
+// "v": [
+//
+//	    "0.2544820000000000",
+//	    "1.0201680000000000"
+//	  ]
 //	}
-package nobitex
+package wallex
 
 import (
 	"context"
@@ -21,6 +48,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -31,21 +59,21 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// OHLCResponse represents the Nobitex OHLC API response.
+// OHLCResponse represents the Wallex OHLC API response.
 // Arrays are parallel: t[i], o[i], h[i], l[i], c[i], v[i] form one candle.
 type OHLCResponse struct {
 	Status     string    `json:"s"`
 	Timestamps []int64   `json:"t"`
-	Opens      []float64 `json:"o"`
-	Highs      []float64 `json:"h"`
-	Lows       []float64 `json:"l"`
-	Closes     []float64 `json:"c"`
-	Volumes    []float64 `json:"v"`
+	Opens      []string `json:"o"`
+	Highs      []string `json:"h"`
+	Lows       []string `json:"l"`
+	Closes     []string `json:"c"`
+	Volumes    []string `json:"v"`
 }
 
-// NobitexOHLC scrapes OHLC data from Nobitex API.
+// WallexOHLC scrapes OHLC data from Nobitex API.
 // Runs daily at 4:30 AM Tehran time, fetches data, then waits for next day.
-type NobitexOHLC struct {
+type WallexOHLC struct {
 	sender      *scraper.Sender
 	logger      *slog.Logger
 	rateLimiter *rate.Limiter
@@ -54,31 +82,31 @@ type NobitexOHLC struct {
 	usdtMu    sync.RWMutex
 }
 
-// NewNobitexOHLCScraper creates a new Nobitex OHLC scraper.
-func NewNobitexOHLCScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *NobitexOHLC {
-	return &NobitexOHLC{
+// NewWallexOHLCScraper creates a new Nobitex OHLC scraper.
+func NewWallexOHLCScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *WallexOHLC {
+	return &WallexOHLC{
 		sender:    scraper.NewSender(kafkaWriter, logger),
-		logger:    logger.With("scraper", "nobitex-ohlc"),
+		logger:    logger.With("scraper", "wallex-ohlc"),
 		usdtPrice: getLatestUSDTPrice(),
 	}
 }
 
-func (n *NobitexOHLC) Name() string { return "nobitex-ohlc" }
+func (w *WallexOHLC) Name() string { return "wallex-ohlc" }
 
 // Run starts the OHLC scraper with a daily schedule at 4:30 AM Tehran time.
 // It waits until 4:30 AM, fetches all symbols, then waits for next day's 4:30 AM.
-func (n *NobitexOHLC) Run(ctx context.Context) error {
+func (w *WallexOHLC) Run(ctx context.Context) error {
 	tehran, err := time.LoadLocation("Asia/Tehran")
 	if err != nil {
 		return fmt.Errorf("failed to load Tehran timezone: %w", err)
 	}
 
-	n.logger.Info("Starting Nobitex OHLC scraper (scheduled daily at 4:30 AM Tehran)")
+	w.logger.Info("Starting Wallex OHLC scraper (scheduled daily at 4:30 AM Tehran)")
 
-	n.logger.Info("Executing initial startup fetch...")
-	if err := n.fetchAllSymbols(ctx); err != nil {
+	w.logger.Info("Executing initial startup fetch...")
+	if err := w.fetchAllSymbols(ctx); err != nil {
 		// Log error but don't crash; let the schedule continue
-		n.logger.Error("Initial OHLC fetch failed", "error", err)
+		w.logger.Error("Initial OHLC fetch failed", "error", err)
 	}
 
 	for {
@@ -89,23 +117,23 @@ func (n *NobitexOHLC) Run(ctx context.Context) error {
 			next = next.Add(24 * time.Hour)
 		}
 
-		n.logger.Info("Next OHLC fetch scheduled", "at", next.Format(time.RFC3339), "in", time.Until(next).Round(time.Minute))
+		w.logger.Info("Next OHLC fetch scheduled", "at", next.Format(time.RFC3339), "in", time.Until(next).Round(time.Minute))
 
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-time.After(time.Until(next)):
-			n.logger.Info("Starting daily OHLC fetch")
-			if err := n.fetchAllSymbols(ctx); err != nil {
-				n.logger.Error("OHLC fetch failed", "error", err)
+			w.logger.Info("Starting daily OHLC fetch")
+			if err := w.fetchAllSymbols(ctx); err != nil {
+				w.logger.Error("OHLC fetch failed", "error", err)
 			}
 		}
 	}
 }
 
 // fetchAllSymbols fetches OHLC data for all available symbols.
-func (n *NobitexOHLC) fetchAllSymbols(ctx context.Context) error {
-	symbols, err := fetchMarkets(n.logger)
+func (w *WallexOHLC) fetchAllSymbols(ctx context.Context) error {
+	symbols, err := fetchMarkets(w.logger)
 	if err != nil {
 		return err
 	}
@@ -113,8 +141,8 @@ func (n *NobitexOHLC) fetchAllSymbols(ctx context.Context) error {
 		return fmt.Errorf("no symbols found")
 	}
 
-	n.rateLimiter = scraper.DefaultRateLimiter()
-	n.logger.Info("Fetching OHLC for symbols", "count", len(symbols))
+	w.rateLimiter = scraper.DefaultRateLimiter()
+	w.logger.Info("Fetching OHLC for symbols", "count", len(symbols))
 
 	for _, symbol := range symbols {
 		select {
@@ -123,23 +151,23 @@ func (n *NobitexOHLC) fetchAllSymbols(ctx context.Context) error {
 		default:
 		}
 
-		if err := n.rateLimiter.Wait(ctx); err != nil {
+		if err := w.rateLimiter.Wait(ctx); err != nil {
 			return err
 		}
 
-		if err := n.fetchOHLC(ctx, symbol); err != nil {
-			n.logger.Warn("Failed to fetch OHLC", "symbol", symbol, "error", err)
+		if err := w.fetchOHLC(ctx, symbol); err != nil {
+			w.logger.Warn("Failed to fetch OHLC", "symbol", symbol, "error", err)
 			continue
 		}
 	}
 
-	n.logger.Info("OHLC fetch completed", "symbols", len(symbols))
+	w.logger.Info("OHLC fetch completed", "symbols", len(symbols))
 	return nil
 }
 
 // fetchOHLC fetches OHLC data for a single symbol (last 30 days).
 // Retries up to 3 times on timeout/connection errors with 2 second delay.
-func (n *NobitexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
+func (w *WallexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 	// Fetch last 30 days of daily OHLC
 	fromTimestamp := scraper.ToMidnight(time.Now().AddDate(0, 0, -30)).Unix()
 	toTimestamp := scraper.ToMidnight(time.Now()).AddDate(0, 0, -1).Unix()
@@ -179,35 +207,47 @@ func (n *NobitexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 		return fmt.Errorf("mismatched array lengths in OHLC response")
 	}
 
-	cleanedSymbol := scraper.NormalizeSymbol("nobitex", symbol)
+	cleanedSymbol := scraper.NormalizeSymbol("wallex", symbol)
 
 	// Update USDT price if this is USDT/IRT
 	if cleanedSymbol == "USDT/IRT" && length > 0 {
-		n.usdtMu.Lock()
-		n.usdtPrice = scraper.NormalizePrice(cleanedSymbol, data.Closes[length-1])
-		n.usdtMu.Unlock()
+		w.usdtMu.Lock()
+
+		closePrice, _ := strconv.ParseFloat(data.Closes[length-1], 64)
+		w.usdtPrice = scraper.NormalizePrice(cleanedSymbol, closePrice)
+		w.usdtMu.Unlock()
 	}
 
 	// Convert each candle to proto and send
 	for i := range length {
 		openTime := scraper.UnixToRFC3339(data.Timestamps[i])
 
+		openPrice, err := strconv.ParseFloat(data.Opens[i], 64)
+		closePrice, err := strconv.ParseFloat(data.Closes[i], 64)
+		highPrice, err := strconv.ParseFloat(data.Highs[i], 64)
+		lowPrice, err := strconv.ParseFloat(data.Lows[i], 64)
+		volume, err := strconv.ParseFloat(data.Volumes[i], 64)
+
+		if err != nil {
+			continue
+		}
+
 		ohlc := &proto.OHLCData{
-			Id:        scraper.GenerateOHLCID("nobitex", cleanedSymbol, "1d", openTime),
-			Exchange:  "nobitex",
+			Id:        scraper.GenerateOHLCID("wallex", cleanedSymbol, "1d", openTime),
+			Exchange:  "wallex",
 			Symbol:    cleanedSymbol,
 			Interval:  "1d",
-			Open:      scraper.NormalizePrice(cleanedSymbol, data.Opens[i]),
-			High:      scraper.NormalizePrice(cleanedSymbol, data.Highs[i]),
-			Low:       scraper.NormalizePrice(cleanedSymbol, data.Lows[i]),
-			Close:     scraper.NormalizePrice(cleanedSymbol, data.Closes[i]),
-			Volume:    data.Volumes[i],
-			UsdtPrice: n.usdtPrice,
+			Open:      scraper.NormalizePrice(cleanedSymbol, openPrice),
+			High:      scraper.NormalizePrice(cleanedSymbol, highPrice),
+			Low:       scraper.NormalizePrice(cleanedSymbol, lowPrice),
+			Close:     scraper.NormalizePrice(cleanedSymbol, closePrice),
+			Volume:    volume,
+			UsdtPrice: w.usdtPrice,
 			OpenTime:  openTime,
 		}
 
-		if err := n.sender.SendOHLC(ctx, ohlc); err != nil {
-			n.logger.Debug("Send error", "error", err)
+		if err := w.sender.SendOHLC(ctx, ohlc); err != nil {
+			w.logger.Debug("Send error", "error", err)
 		}
 	}
 

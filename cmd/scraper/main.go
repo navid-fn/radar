@@ -54,6 +54,7 @@ func main() {
 		tabdeal.NewTabdealScraper(tradeWriter, logger),
 		coingecko.NewCoinGeckoScraper(tradeWriter, logger, &appConfig.Coingecko),
 	}
+	tradeScrapers = []scraper.Scraper{}
 
 	// Kafka writer for OHLC (separate topic)
 	ohlcWriter := &kafka.Writer{
@@ -69,7 +70,8 @@ func main() {
 
 	// Register OHLC scrapers
 	ohlcScrapers := []scraper.Scraper{
-		nobitex.NewNobitexOHLCScraper(ohlcWriter, logger),
+		// nobitex.NewNobitexOHLCScraper(ohlcWriter, logger),
+		wallex.NewWallexOHLCScraper(ohlcWriter, logger),
 	}
 
 	scrapers := append(tradeScrapers, ohlcScrapers...)

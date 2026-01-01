@@ -195,3 +195,35 @@ func ToMidnight(t time.Time) time.Time {
 func UnixToRFC3339(ts int64) string {
 	return time.Unix(ts, 0).UTC().Format(time.RFC3339)
 }
+
+// DoWithRetry executes an HTTP request with retry on timeout/connection errors.
+// Uses exponential backoff: baseDelay * 2^attempt (e.g., 2s, 4s, 8s).
+// Returns the response and error from the last attempt.
+func DoWithRetry(ctx context.Context, req *http.Request, maxRetries int, baseDelay time.Duration) (*http.Response, error) {
+	var lastErr error
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: baseDelay * 2^(attempt-1)
+			delay := baseDelay * time.Duration(1<<(attempt-1))
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+
+		resp, err := HTTPClient.Do(req.Clone(ctx))
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+
+		// Don't retry if context was cancelled
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+	}
+
+	return nil, fmt.Errorf("after %d retries: %w", maxRetries, lastErr)
+}

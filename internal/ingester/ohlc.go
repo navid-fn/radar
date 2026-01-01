@@ -78,7 +78,6 @@ func (oi *OHLCIngester) Start(ctx context.Context) error {
 			oi.logger.Warn("Failed to commit offsets", "error", err)
 		}
 
-		oi.logger.Info("Flushed OHLC candles", "count", len(batch))
 		batch = batch[:0]
 		msgs = msgs[:0]
 		ticker.Reset(oi.cfg.BatchTimeout)
@@ -209,4 +208,5 @@ func (oi *OHLCIngester) transform(p *pb.OHLCData) (*models.OHLC, error) {
 		InsertedAt: time.Now(),
 	}, nil
 }
+
 
