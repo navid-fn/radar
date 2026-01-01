@@ -21,14 +21,17 @@ type AppConfig struct {
 	Ingester IngesterConfig
 
 	// KafkaTrade contains Kafka connection settings for trade data.
-	KafkaTrade KafkaTradeConfig
+	KafkaTrade KafkaConfig
+
+	// KafkaOHLC contains Kafka connection settings for OHLC data.
+	KafkaOHLC KafkaConfig
 
 	// Coingecko contains settings for the CoinGecko scraper.
 	Coingecko CoingeckoConfigs
 }
 
-// KafkaTradeConfig holds Kafka connection settings.
-type KafkaTradeConfig struct {
+// KafkaTradeConfig holds Kafka connection settings for trades.
+type KafkaConfig struct {
 	// Broker is the Kafka broker address (e.g., "localhost:9092").
 	Broker string
 
@@ -38,6 +41,7 @@ type KafkaTradeConfig struct {
 	// GroupID is the consumer group ID for the ingester.
 	GroupID string
 }
+
 
 // IngesterConfig holds settings for batch processing.
 type IngesterConfig struct {
@@ -77,7 +81,7 @@ func getCoingeckoConfigs() CoingeckoConfigs {
 	exchangesID := getEnv("COINGECKO_EXCHANGES", "")
 	var exchanges []string
 	if exchangesID != "" {
-		exchanges = strings.Split(exchangesID, ",")
+	exchanges = strings.Split(exchangesID, ",")
 	}
 
 	scheduleHour := getEnvInt("COINGECKO_SCHEDULE_HOUR", 0)
@@ -98,10 +102,15 @@ func AppLoad() *AppConfig {
 	_ = godotenv.Load() // Ignore error - .env is optional
 
 	return &AppConfig{
-		KafkaTrade: KafkaTradeConfig{
+		KafkaTrade: KafkaConfig{
 			Broker:  getEnv("KAFKA_BROKER", "localhost:9092"),
 			Topic:   getEnv("KAFKA_TRADE_TOPIC", "radar_trades"),
-			GroupID: getEnv("KAFKA_TRADE_GROUP_ID", "radar-consumer"),
+			GroupID: getEnv("KAFKA_TRADE_GROUP_ID", "radar-trade-consumer"),
+		},
+		KafkaOHLC: KafkaConfig{
+			Broker:  getEnv("KAFKA_BROKER", "localhost:9092"),
+			Topic:   getEnv("KAFKA_OHLC_TOPIC", "radar_ohlc"),
+			GroupID: getEnv("KAFKA_OHLC_GROUP_ID", "radar-ohlc-consumer"),
 		},
 		DBDSN: getDatabaseDSN(),
 		Ingester: IngesterConfig{

@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "nobitex/radar/internal/proto";
+
+// TradeData represents a single trade from an exchange.
+message TradeData {
+  string id = 1;          // Unique trade ID (from exchange or generated)
+  string exchange = 2;    // Exchange name (e.g., "nobitex", "wallex")
+  string symbol = 3;      // Trading pair (e.g., "BTC/IRT", "ETH/USDT")
+  double price = 4;       // Trade price in quote currency
+  double volume = 5;      // Trade volume in base currency
+  double quantity = 6;    // Total value (price * volume)
+  string side = 7;        // Trade direction: "buy", "sell", or "all"
+  string time = 8;        // Trade timestamp in RFC3339 format
+  double usdt_price = 9;  // USDT/IRT price at trade time
+}
+
+// TradeDataBatch contains multiple trades (used by WebSocket scrapers).
+message TradeDataBatch {
+  repeated TradeData trades = 1;
+}
+
+// OHLCData represents a single candlestick (Open, High, Low, Close).
+message OHLCData {
+  string id = 1;          // Unique ID: exchange-symbol-interval-openTime
+  string exchange = 2;    // Exchange name
+  string symbol = 3;      // Trading pair
+  string interval = 4;    // Timeframe: "1d", "4h", "1h", "15m", etc.
+  double open = 5;        // Opening price
+  double high = 6;        // Highest price
+  double low = 7;         // Lowest price
+  double close = 8;       // Closing price
+  double volume = 9;      // Trading volume
+  double usdt_price = 10; // USDT/IRT price at candle close
+  string open_time = 11;  // Candle open time in RFC3339 format
+}
+
+// OHLCDataBatch contains multiple OHLC candles.
+message OHLCDataBatch {
+  repeated OHLCData candles = 1;
+}
+

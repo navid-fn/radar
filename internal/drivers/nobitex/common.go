@@ -14,6 +14,9 @@ import (
 const (
 	marketAPI    = "https://apiv2.nobitex.ir/market/stats"
 	usdtPriceAPI = "https://apiv2.nobitex.ir/v3/orderbook/USDTIRT"
+	// ohlcAPI fetches OHLC data. Params: symbol, from (unix), to (unix)
+	// Doc: https://apidocs.nobitex.ir/#6ae2dae4a2
+	ohlcAPI = "https://apiv2.nobitex.ir/market/udf/history?symbol=%s&resolution=D&from=%d&to=%d"
 )
 
 type usdtPrice struct {

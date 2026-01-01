@@ -28,7 +28,8 @@ func main() {
 		Level: slog.LevelInfo,
 	}))
 
-	kafkaWriter := &kafka.Writer{
+	// Kafka writer for trades
+	tradeWriter := &kafka.Writer{
 		Addr:         kafka.TCP(appConfig.KafkaTrade.Broker),
 		Topic:        appConfig.KafkaTrade.Topic,
 		Balancer:     &kafka.LeastBytes{},
@@ -37,36 +38,44 @@ func main() {
 		Async:        true,
 		Compression:  kafka.Zstd,
 	}
-	defer kafkaWriter.Close()
+	defer tradeWriter.Close()
+
+	// Kafka writer for OHLC (separate topic)
+	ohlcWriter := &kafka.Writer{
+		Addr:         kafka.TCP(appConfig.KafkaOHLC.Broker),
+		Topic:        appConfig.KafkaOHLC.Topic,
+		Balancer:     &kafka.LeastBytes{},
+		BatchSize:    100,
+		BatchTimeout: 10 * time.Millisecond,
+		Async:        true,
+		Compression:  kafka.Zstd,
+	}
+	defer ohlcWriter.Close()
 
 	// Register all scrapers
+	// For testing OHLC only, comment out other scrapers
 	scrapers := []scraper.Scraper{
-		// Nobitex
-		nobitex.NewNobitexScraper(kafkaWriter, logger),
-		nobitex.NewNobitexAPIScraper(kafkaWriter, logger),
-
-		// Wallex
-		wallex.NewWallexScraper(kafkaWriter, logger),
-		wallex.NewWallexAPIScraper(kafkaWriter, logger),
-
-		// Ramzinex
-		ramzinex.NewRamzinexScraper(kafkaWriter, logger),
-		ramzinex.NewRamzinexAPIScraper(kafkaWriter, logger),
-
-		// Bitpin
-		bitpin.NewBitpinScraper(kafkaWriter, logger),
-		bitpin.NewBitpinAPIScraper(kafkaWriter, logger),
-
-		// Tabdeal
-		tabdeal.NewTabdealScraper(kafkaWriter, logger),
-
-		// CoinGecko
-		coingecko.NewCoinGeckoScraper(kafkaWriter, logger, &appConfig.Coingecko),
+		nobitex.NewNobitexScraper(tradeWriter, logger),
+		nobitex.NewNobitexAPIScraper(tradeWriter, logger),
+		nobitex.NewNobitexOHLCScraper(ohlcWriter, logger), // Uses OHLC writer
+		wallex.NewWallexScraper(tradeWriter, logger),
+		wallex.NewWallexAPIScraper(tradeWriter, logger),
+		ramzinex.NewRamzinexScraper(tradeWriter, logger),
+		ramzinex.NewRamzinexAPIScraper(tradeWriter, logger),
+		bitpin.NewBitpinScraper(tradeWriter, logger),
+		bitpin.NewBitpinAPIScraper(tradeWriter, logger),
+		tabdeal.NewTabdealScraper(tradeWriter, logger),
+		coingecko.NewCoinGeckoScraper(tradeWriter, logger, &appConfig.Coingecko),
 	}
 
 	// Setup graceful shutdown
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	logger.Info("Starting scrapers",
+		"trade_topic", appConfig.KafkaTrade.Topic,
+		"ohlc_topic", appConfig.KafkaOHLC.Topic,
+	)
 
 	// Start all scrapers
 	var wg sync.WaitGroup

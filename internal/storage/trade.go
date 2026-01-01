@@ -11,16 +11,21 @@ import (
 	"nobitex/radar/internal/models"
 )
 
-// TradeStorage defines the interface for persisting trade data.
+// Storage defines the interface for persisting trade and OHLC data.
 // Implementations must be safe for concurrent use.
-type TradeStorage interface {
+type Storage interface {
 	// CreateTrades inserts a batch of trades into the database.
-	// Uses batch insert for optimal ClickHouse performance.
 	CreateTrades(ctx context.Context, trades []*models.Trade) error
+
+	// CreateOHLC inserts a batch of OHLC candles into the database.
+	CreateOHLC(ctx context.Context, candles []*models.OHLC) error
 
 	// Close releases database connection resources.
 	Close() error
 }
+
+// TradeStorage is an alias for backward compatibility.
+type TradeStorage = Storage
 
 // clickhouseStorage implements TradeStorage using native ClickHouse driver.
 // Uses batch inserts for high-throughput data ingestion.
@@ -83,6 +88,47 @@ func (s *clickhouseStorage) CreateTrades(ctx context.Context, trades []*models.T
 			t.QuoteAmount,
 			t.USDTPrice,
 			t.EventTime,
+			now,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return batch.Send()
+}
+
+// CreateOHLC inserts OHLC candles using ClickHouse batch insert.
+func (s *clickhouseStorage) CreateOHLC(ctx context.Context, candles []*models.OHLC) error {
+	if len(candles) == 0 {
+		return nil
+	}
+
+	batch, err := s.conn.PrepareBatch(ctx, `
+		INSERT INTO ohlc (
+			id, source, symbol, interval,
+			open, high, low, close, volume, usdt_price,
+			open_time, inserted_at
+		)
+	`)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	for _, c := range candles {
+		err := batch.Append(
+			c.ID,
+			c.Source,
+			c.Symbol,
+			c.Interval,
+			c.Open,
+			c.High,
+			c.Low,
+			c.Close,
+			c.Volume,
+			c.USDTPrice,
+			c.OpenTime,
 			now,
 		)
 		if err != nil {

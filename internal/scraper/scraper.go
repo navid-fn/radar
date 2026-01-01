@@ -170,3 +170,28 @@ func NewRateLimiter(requestsPerMinute int) *rate.Limiter {
 func DefaultRateLimiter() *rate.Limiter {
 	return NewRateLimiter(60)
 }
+
+// SendOHLC serializes a single OHLC candle to protobuf and sends it to Kafka.
+func (s *Sender) SendOHLC(ctx context.Context, ohlc *pb.OHLCData) error {
+	data, err := proto.Marshal(ohlc)
+	if err != nil {
+		return fmt.Errorf("serialize OHLC failed: %w", err)
+	}
+	return s.Send(ctx, data)
+}
+
+// GenerateOHLCID creates a unique ID for an OHLC candle.
+// Format: exchange-symbol-interval-openTime
+func GenerateOHLCID(exchange, symbol, interval, openTime string) string {
+	return fmt.Sprintf("%s-%s-%s-%s", exchange, symbol, interval, openTime)
+}
+
+// ToMidnight returns the start of day (00:00:00) for the given time in UTC.
+func ToMidnight(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+// UnixToRFC3339 converts a Unix timestamp (seconds) to RFC3339 string.
+func UnixToRFC3339(ts int64) string {
+	return time.Unix(ts, 0).UTC().Format(time.RFC3339)
+}
