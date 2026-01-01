@@ -74,6 +74,12 @@ func (n *NobitexOHLC) Run(ctx context.Context) error {
 	}
 
 	n.logger.Info("Starting Nobitex OHLC scraper (scheduled daily at 4:30 AM Tehran)")
+	
+	n.logger.Info("Executing initial startup fetch...")
+	if err := n.fetchAllSymbols(ctx); err != nil {
+		// Log error but don't crash; let the schedule continue
+		n.logger.Error("Initial OHLC fetch failed", "error", err)
+	}
 
 	for {
 		// Calculate next 4:30 AM Tehran
@@ -135,7 +141,7 @@ func (n *NobitexOHLC) fetchAllSymbols(ctx context.Context) error {
 func (n *NobitexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 	// Fetch last 30 days of daily OHLC
 	fromTimestamp := scraper.ToMidnight(time.Now().AddDate(0, 0, -30)).Unix()
-	toTimestamp := scraper.ToMidnight(time.Now()).Unix()
+	toTimestamp := scraper.ToMidnight(time.Now()).AddDate(0, 0, -1).Unix()
 
 	url := fmt.Sprintf(ohlcAPI, symbol, fromTimestamp, toTimestamp)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -197,6 +203,9 @@ func (n *NobitexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 			Volume:    data.Volumes[i],
 			UsdtPrice: n.usdtPrice,
 			OpenTime:  openTime,
+		}
+		if cleanedSymbol == "BTC/IRT" {
+			fmt.Println(ohlc)
 		}
 
 		if err := n.sender.SendOHLC(ctx, ohlc); err != nil {

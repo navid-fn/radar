@@ -40,6 +40,21 @@ func main() {
 	}
 	defer tradeWriter.Close()
 
+
+	// Register trade scrapers scrapers
+	tradeScrapers := []scraper.Scraper{
+		nobitex.NewNobitexScraper(tradeWriter, logger),
+		nobitex.NewNobitexAPIScraper(tradeWriter, logger),
+		wallex.NewWallexScraper(tradeWriter, logger),
+		wallex.NewWallexAPIScraper(tradeWriter, logger),
+		ramzinex.NewRamzinexScraper(tradeWriter, logger),
+		ramzinex.NewRamzinexAPIScraper(tradeWriter, logger),
+		bitpin.NewBitpinScraper(tradeWriter, logger),
+		bitpin.NewBitpinAPIScraper(tradeWriter, logger),
+		tabdeal.NewTabdealScraper(tradeWriter, logger),
+		coingecko.NewCoinGeckoScraper(tradeWriter, logger, &appConfig.Coingecko),
+	}
+
 	// Kafka writer for OHLC (separate topic)
 	ohlcWriter := &kafka.Writer{
 		Addr:         kafka.TCP(appConfig.KafkaOHLC.Broker),
@@ -52,21 +67,12 @@ func main() {
 	}
 	defer ohlcWriter.Close()
 
-	// Register all scrapers
-	// For testing OHLC only, comment out other scrapers
-	scrapers := []scraper.Scraper{
-		nobitex.NewNobitexScraper(tradeWriter, logger),
-		nobitex.NewNobitexAPIScraper(tradeWriter, logger),
-		nobitex.NewNobitexOHLCScraper(ohlcWriter, logger), // Uses OHLC writer
-		wallex.NewWallexScraper(tradeWriter, logger),
-		wallex.NewWallexAPIScraper(tradeWriter, logger),
-		ramzinex.NewRamzinexScraper(tradeWriter, logger),
-		ramzinex.NewRamzinexAPIScraper(tradeWriter, logger),
-		bitpin.NewBitpinScraper(tradeWriter, logger),
-		bitpin.NewBitpinAPIScraper(tradeWriter, logger),
-		tabdeal.NewTabdealScraper(tradeWriter, logger),
-		coingecko.NewCoinGeckoScraper(tradeWriter, logger, &appConfig.Coingecko),
+	// Register OHLC scrapers
+	ohlcScrapers := []scraper.Scraper{
+		nobitex.NewNobitexOHLCScraper(ohlcWriter, logger),
 	}
+
+	scrapers := append(tradeScrapers, ohlcScrapers...)
 
 	// Setup graceful shutdown
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
