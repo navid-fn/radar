@@ -73,7 +73,7 @@ func (n *BitpinOHLC) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to load Tehran timezone: %w", err)
 	}
 
-	n.logger.Info("Starting Nobitex OHLC scraper (scheduled daily at 4:30 AM Tehran)")
+	n.logger.Info("Starting Bitpin OHLC scraper (scheduled daily at 4:30 AM Tehran)")
 
 	n.logger.Info("Executing initial startup fetch...")
 	if err := n.fetchAllSymbols(ctx); err != nil {
