@@ -171,7 +171,7 @@ func (n *BitpinOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 		return nil // No data
 	}
 
-	cleanedSymbol := scraper.NormalizeSymbol("nobitex", symbol)
+	cleanedSymbol := scraper.NormalizeSymbol("bitpin", symbol)
 
 	// Update USDT price if this is USDT/IRT
 	if cleanedSymbol == "USDT/IRT" && length > 0 {
