@@ -13,6 +13,7 @@ import (
 const (
 	marketsAPI = "https://api.bitpin.ir/api/v1/mkt/markets/"
 	tickersAPI = "https://api.bitpin.ir/api/v1/mkt/tickers/"
+	ohlcAPI = "https://api.bitpin.ir/v1/mkt/tv/get_bars/?symbol=%s&from=%d&to=%d&res=1D"
 )
 
 type market struct {
