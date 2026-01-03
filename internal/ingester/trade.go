@@ -204,7 +204,7 @@ func (ti *TradeIngester) transform(p *pb.TradeData) (*models.Trade, error) {
 
 	eventTime, err := time.Parse(time.RFC3339, p.Time)
 	if err != nil {
-		eventTime = time.Now()
+		return nil, fmt.Errorf("time has error")
 	}
 
 	return &models.Trade{
@@ -214,7 +214,7 @@ func (ti *TradeIngester) transform(p *pb.TradeData) (*models.Trade, error) {
 		Side:        p.Side,
 		Price:       p.Price,
 		BaseAmount:  p.Volume,
-		QuoteAmount: p.Price * p.Volume,
+		QuoteAmount: p.Quantity,
 		EventTime:   eventTime,
 		InsertedAt:  time.Now(),
 		USDTPrice:   p.UsdtPrice,
