@@ -112,7 +112,7 @@ func (r *RamzinexAPI) fetchTrades(ctx context.Context, pairID int) error {
 		cleanedSymbol := scraper.NormalizeSymbol("ramzinex", strings.ToUpper(pairName))
 		cleanedPrice := scraper.NormalizePrice(cleanedSymbol, row[0].(float64))
 		volume := row[1].(float64)
-		tradeTime := scraper.TimestampToRFC3339(row[4].(int64))
+		tradeTime := scraper.FloatTimestampToRFC3339(row[4].(float64))
 		side := row[3].(string)
 		id := row[5].(string)
 
