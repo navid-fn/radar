@@ -97,30 +97,25 @@ func (b *BitpinAPI) fetchTrades(ctx context.Context, symbol string) error {
 		return fmt.Errorf("status %d", resp.StatusCode)
 	}
 
-	var trades []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&trades); err != nil {
+	var tradeMatches []tradeMatch
+	if err := json.NewDecoder(resp.Body).Decode(&tradeMatches); err != nil {
 		return err
 	}
 
-	for _, t := range trades {
-		id, _ := t["id"].(string)
-		side, _ := t["side"].(string)
-		priceStr, _ := t["price"].(string)
-		volumeStr, _ := t["base_amount"].(string)
-		timestamp, _ := t["time"].(float64)
-
-		price, _ := strconv.ParseFloat(priceStr, 64)
-		volume, _ := strconv.ParseFloat(volumeStr, 64)
+	for _, m := range tradeMatches {
+		tradeTime := scraper.FloatTimestampToRFC3339(m.Time)
+		price, _ := strconv.ParseFloat(m.Price, 64)
+		volume, _ := strconv.ParseFloat(m.BaseAmount, 64)
 
 		if volume == 0 && price > 0 {
-			quoteAmountStr, _ := t["quote_amount"].(string)
+			// check if quote_amount has value
+			// sometimes the base_amount return 0.00
+			quoteAmountStr := m.QuoteAmount
 			quoteAmount, err := strconv.ParseFloat(quoteAmountStr, 64)
 			if err == nil {
 				volume = quoteAmount / price
 			}
 		}
-
-		tradeTime := scraper.FloatTimestampToRFC3339(timestamp)
 		cleanedSymbol := scraper.NormalizeSymbol("bitpin", symbol)
 
 		if cleanedSymbol == "USDT/IRT" {
@@ -130,20 +125,20 @@ func (b *BitpinAPI) fetchTrades(ctx context.Context, symbol string) error {
 		}
 
 		trade := &proto.TradeData{
-			Id:        id,
+			Id:        m.ID,
 			Exchange:  "bitpin",
 			Symbol:    cleanedSymbol,
 			Price:     price,
 			Volume:    volume,
 			Quantity:  volume * price,
-			Side:      side,
+			Side:      m.Side,
 			Time:      tradeTime,
 			UsdtPrice: b.usdtPrice,
 		}
-
 		if err := b.sender.SendTrade(ctx, trade); err != nil {
 			b.logger.Debug("Send error", "error", err)
 		}
 	}
+
 	return nil
 }

@@ -13,7 +13,7 @@ import (
 const (
 	marketsAPI = "https://api.bitpin.ir/api/v1/mkt/markets/"
 	tickersAPI = "https://api.bitpin.ir/api/v1/mkt/tickers/"
-	ohlcAPI = "https://api.bitpin.ir/v1/mkt/tv/get_bars/?symbol=%s&from=%d&to=%d&res=1D"
+	ohlcAPI    = "https://api.bitpin.ir/v1/mkt/tv/get_bars/?symbol=%s&from=%d&to=%d&res=1D"
 )
 
 type market struct {
@@ -24,6 +24,15 @@ type market struct {
 type ticker struct {
 	Symbol string `json:"symbol"`
 	Price  string `json:"price"`
+}
+
+type tradeMatch struct {
+	ID          string  `json:"id"`
+	Price       string  `json:"price"`
+	BaseAmount  string  `json:"base_amount"`
+	QuoteAmount string  `json:"quote_amount"`
+	Side        string  `json:"side"`
+	Time        float64 `json:"time"`
 }
 
 func fetchMarkets(logger *slog.Logger) ([]string, error) {

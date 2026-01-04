@@ -129,27 +129,21 @@ func (b *BitpinWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, erro
 		symbol = channel[8:]
 	}
 
-	matches, _ := dataField["matches"].([]any)
-	matchTime, _ := dataField["event_time"].(string)
+	matches, ok := dataField["matches"].([]tradeMatch)
+	if !ok {
+		return nil, nil
+	}
 
 	var trades []*pb.TradeData
 	for _, m := range matches {
-		match, ok := m.(map[string]any)
-		if !ok {
-			continue
-		}
+		tradeTime := scraper.FloatTimestampToRFC3339(m.Time)
+		price, _ := strconv.ParseFloat(m.Price, 64)
+		volume, _ := strconv.ParseFloat(m.BaseAmount, 64)
 
-		id, _ := match["id"].(string)
-		priceStr, _ := match["price"].(string)
-		volumeStr, _ := match["base_amount"].(string)
-		side, _ := match["side"].(string)
-
-		price, _ := strconv.ParseFloat(priceStr, 64)
-		volume, _ := strconv.ParseFloat(volumeStr, 64)
 		if volume == 0 && price > 0 {
 			// check if quote_amount has value
 			// sometimes the base_amount return 0.00
-			quoteAmountStr, _ := match["quote_amount"].(string)
+			quoteAmountStr := m.QuoteAmount
 			quoteAmount, err := strconv.ParseFloat(quoteAmountStr, 64)
 			if err == nil {
 				volume = quoteAmount / price
@@ -164,14 +158,14 @@ func (b *BitpinWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, erro
 		}
 
 		trade := &pb.TradeData{
-			Id:        id,
+			Id:        m.ID,
 			Exchange:  "bitpin",
 			Symbol:    cleanedSymbol,
 			Price:     price,
 			Volume:    volume,
 			Quantity:  volume * price,
-			Side:      side,
-			Time:      matchTime,
+			Side:      m.Side,
+			Time:      tradeTime,
 			UsdtPrice: b.usdtPrice,
 		}
 		trades = append(trades, trade)
