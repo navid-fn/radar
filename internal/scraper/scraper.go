@@ -128,17 +128,6 @@ func FloatTimestampToRFC3339(ts float64) string {
 	return time.Unix(sec, nsec).UTC().Format(time.RFC3339)
 }
 
-// ParseTimeToRFC3339 parses a time string with the given layout and returns RFC3339.
-// Falls back to current time if parsing fails.
-// Common layouts: "2006-01-02 15:04:05", time.RFC3339, etc.
-func ParseTimeToRFC3339(layout, timeStr string) string {
-	t, err := time.Parse(layout, timeStr)
-	if err != nil {
-		return time.Now().UTC().Format(time.RFC3339)
-	}
-	return t.UTC().Format(time.RFC3339)
-}
-
 // AnyToRFC3339 converts various time formats to RFC3339.
 // Handles: string (returns as-is), float64/int64 (treats as milliseconds).
 // Used for WebSocket messages where time format varies.

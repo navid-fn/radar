@@ -41,7 +41,6 @@ type latestAPIData struct {
 }
 
 // ramzinex uses "2006-01-02 15:04:05" format
-const ramzinexTimeLayout = "2006-01-02 15:04:05"
 
 func fetchPairs(logger *slog.Logger) ([]pairDetail, map[int]string, error) {
 	resp, err := scraper.HTTPClient.Get(pairsAPI)
