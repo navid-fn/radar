@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"strings"
 	"time"
 
 	"nobitex/radar/internal/models"
@@ -140,10 +139,6 @@ func (ti *TradeIngester) parseMessage(msg kafka.Message) ([]*models.Trade, error
 	// Try single trade first
 	var single pb.TradeData
 	if err := proto.Unmarshal(msg.Value, &single); err == nil && single.Id != "" && single.Exchange != "" && single.Symbol != "" {
-		// Skip OHLC messages that ended up in trade topic (legacy data)
-		if isOHLCMessage(&single) {
-			return nil, fmt.Errorf("skipping OHLC message in trade topic")
-		}
 		return ti.convertList([]*pb.TradeData{&single})
 	}
 
@@ -156,18 +151,6 @@ func (ti *TradeIngester) parseMessage(msg kafka.Message) ([]*models.Trade, error
 	}
 
 	return nil, fmt.Errorf("unknown message format")
-}
-
-// isOHLCMessage detects if a message is actually OHLC data parsed as Trade.
-// OHLC IDs contain interval markers like "-1d-", "-4h-", "-1h-".
-// Also, trades always have a side (buy/sell), OHLC never does.
-func isOHLCMessage(t *pb.TradeData) bool {
-	// Check for interval pattern in ID
-	if strings.Contains(t.Id, "-1d-") || strings.Contains(t.Id, "-4h-") ||
-		strings.Contains(t.Id, "-1h-") || strings.Contains(t.Id, "-15m-") {
-		return true
-	}
-	return false
 }
 
 // convertList transforms protobuf trades to database models.

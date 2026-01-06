@@ -62,8 +62,8 @@ import (
 // OHLCResponse represents the Wallex OHLC API response.
 // Arrays are parallel: t[i], o[i], h[i], l[i], c[i], v[i] form one candle.
 type OHLCResponse struct {
-	Status     string    `json:"s"`
-	Timestamps []int64   `json:"t"`
+	Status     string   `json:"s"`
+	Timestamps []int64  `json:"t"`
 	Opens      []string `json:"o"`
 	Highs      []string `json:"h"`
 	Lows       []string `json:"l"`
@@ -214,20 +214,31 @@ func (w *WallexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 		w.usdtMu.Lock()
 
 		closePrice, _ := strconv.ParseFloat(data.Closes[length-1], 64)
-		w.usdtPrice = scraper.NormalizePrice(cleanedSymbol, closePrice)
+		w.usdtPrice = closePrice
 		w.usdtMu.Unlock()
 	}
 
 	// Convert each candle to proto and send
 	for i := range length {
 		openTime := scraper.UnixToRFC3339(data.Timestamps[i])
-
 		openPrice, err := strconv.ParseFloat(data.Opens[i], 64)
+		if err != nil {
+			continue
+		}
 		closePrice, err := strconv.ParseFloat(data.Closes[i], 64)
+		if err != nil {
+			continue
+		}
 		highPrice, err := strconv.ParseFloat(data.Highs[i], 64)
+		if err != nil {
+			continue
+		}
 		lowPrice, err := strconv.ParseFloat(data.Lows[i], 64)
-		volume, err := strconv.ParseFloat(data.Volumes[i], 64)
 
+		if err != nil {
+			continue
+		}
+		volume, err := strconv.ParseFloat(data.Volumes[i], 64)
 		if err != nil {
 			continue
 		}
