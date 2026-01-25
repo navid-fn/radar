@@ -35,12 +35,12 @@ import (
 )
 
 type OHLCResponse struct {
-	Timestamp float64   `json:"ts"`
+	Timestamp float64 `json:"ts"`
 	Open      float64 `json:"open"`
 	High      string  `json:"high"`
 	Low       string  `json:"low"`
 	Close     float64 `json:"close"`
-	Volume    string  `json:"volume"`
+	Volume    any     `json:"volume"`
 }
 
 // BitpinOHLC scrapes OHLC data from Nobitex API.
@@ -191,10 +191,17 @@ func (n *BitpinOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 		if err != nil {
 			continue
 		}
+		var volumeParsed float64
 
-		volume, err := strconv.ParseFloat(d.Volume, 64)
-		if err != nil {
-			continue
+		switch volume := d.Volume.(type) {
+		case string:
+			{
+				volumeParsed, _ = strconv.ParseFloat(volume, 64)
+			}
+		case float64:
+			{
+				volumeParsed = volume
+			}
 		}
 
 		ohlc := &proto.OHLCData{
@@ -206,7 +213,7 @@ func (n *BitpinOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 			High:      scraper.NormalizePrice(cleanedSymbol, high),
 			Low:       scraper.NormalizePrice(cleanedSymbol, low),
 			Close:     scraper.NormalizePrice(cleanedSymbol, d.Close),
-			Volume:    volume,
+			Volume:    volumeParsed,
 			UsdtPrice: n.usdtPrice,
 			OpenTime:  openTime,
 		}
