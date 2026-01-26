@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"nobitex/radar/configs"
+	"nobitex/radar/internal/drivers/nobitex"
 	"nobitex/radar/internal/drivers/wallex"
 	"nobitex/radar/internal/scraper"
 
@@ -52,7 +53,6 @@ func main() {
 	}
 
 	// Register OHLC scrapers
-
 	ohlcScrapers := []scraper.Scraper{}
 
 	// Kafka writer for Depth (separate topic)
@@ -68,9 +68,11 @@ func main() {
 
 	// Register Depth scrapers
 	depthScrapers := []scraper.Scraper{
-		// nobitex.NewNobitexDepthScraper(depthWriter, logger),
+		nobitex.NewNobitexDepthScraper(depthWriter, logger),
 		wallex.NewWallexDepthScraper(depthWriter, logger),
 	}
+
+	ohlcScrapers = []scraper.Scraper{}
 
 	scrapers := append(tradeScrapers, ohlcScrapers...)
 	scrapers = append(scrapers, depthScrapers...)
@@ -105,7 +107,6 @@ func main() {
 		// context stop
 		defer stop()
 	}
-
 	defer shutdown()
 
 	// Wait for context cancellation (signal received)
