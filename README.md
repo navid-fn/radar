@@ -165,6 +165,3 @@ All trades are normalized to:
 | `base_amount` | Quantity traded                         |
 | `usdt_price`  | USDT/IRT rate at trade time             |
 
-## License
-
-MIT
