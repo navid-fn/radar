@@ -26,6 +26,9 @@ type AppConfig struct {
 	// KafkaOHLC contains Kafka connection settings for OHLC data.
 	KafkaOHLC KafkaConfig
 
+	// KafkaDepth
+	KafkaDepth KafkaConfig
+
 	// Coingecko contains settings for the CoinGecko scraper.
 	Coingecko CoingeckoConfigs
 }
@@ -41,7 +44,6 @@ type KafkaConfig struct {
 	// GroupID is the consumer group ID for the ingester.
 	GroupID string
 }
-
 
 // IngesterConfig holds settings for batch processing.
 type IngesterConfig struct {
@@ -81,7 +83,7 @@ func getCoingeckoConfigs() CoingeckoConfigs {
 	exchangesID := getEnv("COINGECKO_EXCHANGES", "")
 	var exchanges []string
 	if exchangesID != "" {
-	exchanges = strings.Split(exchangesID, ",")
+		exchanges = strings.Split(exchangesID, ",")
 	}
 
 	scheduleHour := getEnvInt("COINGECKO_SCHEDULE_HOUR", 0)
@@ -111,6 +113,11 @@ func AppLoad() *AppConfig {
 			Broker:  getEnv("KAFKA_BROKER", "localhost:9092"),
 			Topic:   getEnv("KAFKA_OHLC_TOPIC", "radar_ohlc"),
 			GroupID: getEnv("KAFKA_OHLC_GROUP_ID", "radar-ohlc-consumer"),
+		},
+		KafkaDepth: KafkaConfig{
+			Broker:  getEnv("KAFKA_BROKER", "localhost:9092"),
+			Topic:   getEnv("KAFKA_DEPTH_TOPIC", "radar_depth"),
+			GroupID: getEnv("KAFKA_DEPTH_GROUP_ID", "radar-depth-consumer"),
 		},
 		DBDSN: getDatabaseDSN(),
 		Ingester: IngesterConfig{

@@ -38,8 +38,6 @@ func main() {
 		Async:        true,
 		Compression:  kafka.Zstd,
 	}
-	defer tradeWriter.Close()
-
 
 	// Register trade scrapers scrapers
 	tradeScrapers := []scraper.Scraper{
@@ -55,6 +53,8 @@ func main() {
 		coingecko.NewCoinGeckoScraper(tradeWriter, logger, &appConfig.Coingecko),
 	}
 
+	tradeScrapers = []scraper.Scraper{}
+
 	// Kafka writer for OHLC (separate topic)
 	ohlcWriter := &kafka.Writer{
 		Addr:         kafka.TCP(appConfig.KafkaOHLC.Broker),
@@ -65,7 +65,6 @@ func main() {
 		Async:        true,
 		Compression:  kafka.Zstd,
 	}
-	defer ohlcWriter.Close()
 
 	// Register OHLC scrapers
 	ohlcScrapers := []scraper.Scraper{
@@ -75,15 +74,34 @@ func main() {
 		bitpin.NewBitpinOHLCScraper(ohlcWriter, logger),
 	}
 
+	ohlcScrapers = []scraper.Scraper{}
+
+	// Kafka writer for Depth (separate topic)
+	depthWriter := &kafka.Writer{
+		Addr:         kafka.TCP(appConfig.KafkaDepth.Broker),
+		Topic:        appConfig.KafkaDepth.Topic,
+		Balancer:     &kafka.LeastBytes{},
+		BatchSize:    100,
+		BatchTimeout: 10 * time.Millisecond,
+		Async:        true,
+		Compression:  kafka.Zstd,
+	}
+
+	// Register Depth scrapers
+	depthScrapers := []scraper.Scraper{
+		nobitex.NewNobitexDepthAPIScraper(depthWriter, logger),
+	}
+
 	scrapers := append(tradeScrapers, ohlcScrapers...)
+	scrapers = append(scrapers, depthScrapers...)
 
 	// Setup graceful shutdown
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	logger.Info("Starting scrapers",
 		"trade_topic", appConfig.KafkaTrade.Topic,
 		"ohlc_topic", appConfig.KafkaOHLC.Topic,
+		"depth_topic", appConfig.KafkaDepth.Topic,
 	)
 
 	// Start all scrapers
@@ -98,6 +116,16 @@ func main() {
 			}
 		}(s)
 	}
+
+	// shutdown function
+	shutdown := func() {
+		// stop writers
+		defer tradeWriter.Close()
+		defer ohlcWriter.Close()
+		// context stop
+		defer stop()
+	}
+	defer shutdown()
 
 	// Wait for context cancellation (signal received)
 	<-ctx.Done()

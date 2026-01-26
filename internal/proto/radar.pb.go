@@ -345,6 +345,146 @@ func (x *OHLCDataBatch) GetCandles() []*OHLCData {
 	return nil
 }
 
+// OrderLevel represents a single price level in the order book.
+// We keep this lightweight as it will be repeated hundreds of times.
+type OrderLevel struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Price         float64                `protobuf:"fixed64,1,opt,name=price,proto3" json:"price,omitempty"`
+	Volume        float64                `protobuf:"fixed64,2,opt,name=volume,proto3" json:"volume,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OrderLevel) Reset() {
+	*x = OrderLevel{}
+	mi := &file_internal_proto_radar_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OrderLevel) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrderLevel) ProtoMessage() {}
+
+func (x *OrderLevel) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_radar_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrderLevel.ProtoReflect.Descriptor instead.
+func (*OrderLevel) Descriptor() ([]byte, []int) {
+	return file_internal_proto_radar_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *OrderLevel) GetPrice() float64 {
+	if x != nil {
+		return x.Price
+	}
+	return 0
+}
+
+func (x *OrderLevel) GetVolume() float64 {
+	if x != nil {
+		return x.Volume
+	}
+	return 0
+}
+
+// OrderBookSnapshot represents the full state of the market depth at one moment.
+// Instead of repeating 'exchange' and 'symbol' for every row, we group them here.
+type OrderBookSnapshot struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                                   // Unique snapshot ID (UUID or generated)
+	Exchange      string                 `protobuf:"bytes,2,opt,name=exchange,proto3" json:"exchange,omitempty"`                       // Exchange name (e.g. "nobitex")
+	Symbol        string                 `protobuf:"bytes,3,opt,name=symbol,proto3" json:"symbol,omitempty"`                           // Trading pair (e.g. "BTC/IRT")
+	Bids          []*OrderLevel          `protobuf:"bytes,4,rep,name=bids,proto3" json:"bids,omitempty"`                               // List of Buy orders
+	Asks          []*OrderLevel          `protobuf:"bytes,5,rep,name=asks,proto3" json:"asks,omitempty"`                               // List of Sell orders
+	LastUpdate    string                 `protobuf:"bytes,6,opt,name=last_update,json=lastUpdate,proto3" json:"last_update,omitempty"` // Exchange timestamp in RFC3339 format
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OrderBookSnapshot) Reset() {
+	*x = OrderBookSnapshot{}
+	mi := &file_internal_proto_radar_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OrderBookSnapshot) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrderBookSnapshot) ProtoMessage() {}
+
+func (x *OrderBookSnapshot) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_radar_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrderBookSnapshot.ProtoReflect.Descriptor instead.
+func (*OrderBookSnapshot) Descriptor() ([]byte, []int) {
+	return file_internal_proto_radar_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *OrderBookSnapshot) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *OrderBookSnapshot) GetExchange() string {
+	if x != nil {
+		return x.Exchange
+	}
+	return ""
+}
+
+func (x *OrderBookSnapshot) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *OrderBookSnapshot) GetBids() []*OrderLevel {
+	if x != nil {
+		return x.Bids
+	}
+	return nil
+}
+
+func (x *OrderBookSnapshot) GetAsks() []*OrderLevel {
+	if x != nil {
+		return x.Asks
+	}
+	return nil
+}
+
+func (x *OrderBookSnapshot) GetLastUpdate() string {
+	if x != nil {
+		return x.LastUpdate
+	}
+	return ""
+}
+
 var File_internal_proto_radar_proto protoreflect.FileDescriptor
 
 const file_internal_proto_radar_proto_rawDesc = "" +
@@ -378,7 +518,19 @@ const file_internal_proto_radar_proto_rawDesc = "" +
 	" \x01(\x01R\tusdtPrice\x12\x1b\n" +
 	"\topen_time\x18\v \x01(\tR\bopenTime\":\n" +
 	"\rOHLCDataBatch\x12)\n" +
-	"\acandles\x18\x01 \x03(\v2\x0f.proto.OHLCDataR\acandlesB\x1eZ\x1cnobitex/radar/internal/protob\x06proto3"
+	"\acandles\x18\x01 \x03(\v2\x0f.proto.OHLCDataR\acandles\":\n" +
+	"\n" +
+	"OrderLevel\x12\x14\n" +
+	"\x05price\x18\x01 \x01(\x01R\x05price\x12\x16\n" +
+	"\x06volume\x18\x02 \x01(\x01R\x06volume\"\xc6\x01\n" +
+	"\x11OrderBookSnapshot\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
+	"\bexchange\x18\x02 \x01(\tR\bexchange\x12\x16\n" +
+	"\x06symbol\x18\x03 \x01(\tR\x06symbol\x12%\n" +
+	"\x04bids\x18\x04 \x03(\v2\x11.proto.OrderLevelR\x04bids\x12%\n" +
+	"\x04asks\x18\x05 \x03(\v2\x11.proto.OrderLevelR\x04asks\x12\x1f\n" +
+	"\vlast_update\x18\x06 \x01(\tR\n" +
+	"lastUpdateB\x1eZ\x1cnobitex/radar/internal/protob\x06proto3"
 
 var (
 	file_internal_proto_radar_proto_rawDescOnce sync.Once
@@ -392,21 +544,25 @@ func file_internal_proto_radar_proto_rawDescGZIP() []byte {
 	return file_internal_proto_radar_proto_rawDescData
 }
 
-var file_internal_proto_radar_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_internal_proto_radar_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_internal_proto_radar_proto_goTypes = []any{
-	(*TradeData)(nil),      // 0: proto.TradeData
-	(*TradeDataBatch)(nil), // 1: proto.TradeDataBatch
-	(*OHLCData)(nil),       // 2: proto.OHLCData
-	(*OHLCDataBatch)(nil),  // 3: proto.OHLCDataBatch
+	(*TradeData)(nil),         // 0: proto.TradeData
+	(*TradeDataBatch)(nil),    // 1: proto.TradeDataBatch
+	(*OHLCData)(nil),          // 2: proto.OHLCData
+	(*OHLCDataBatch)(nil),     // 3: proto.OHLCDataBatch
+	(*OrderLevel)(nil),        // 4: proto.OrderLevel
+	(*OrderBookSnapshot)(nil), // 5: proto.OrderBookSnapshot
 }
 var file_internal_proto_radar_proto_depIdxs = []int32{
 	0, // 0: proto.TradeDataBatch.trades:type_name -> proto.TradeData
 	2, // 1: proto.OHLCDataBatch.candles:type_name -> proto.OHLCData
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	4, // 2: proto.OrderBookSnapshot.bids:type_name -> proto.OrderLevel
+	4, // 3: proto.OrderBookSnapshot.asks:type_name -> proto.OrderLevel
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_internal_proto_radar_proto_init() }
@@ -420,7 +576,7 @@ func file_internal_proto_radar_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_proto_radar_proto_rawDesc), len(file_internal_proto_radar_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

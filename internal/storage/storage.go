@@ -20,6 +20,9 @@ type Storage interface {
 	// CreateOHLC inserts a batch of OHLC candles into the database.
 	CreateOHLC(ctx context.Context, candles []*models.OHLC) error
 
+	// CreateDepths inserts a batch of depths into the database
+	CreateDepths(ctx context.Context, depths []*models.Depth) error
+
 	// Close releases database connection resources.
 	Close() error
 }
@@ -142,4 +145,41 @@ func (s *clickhouseStorage) CreateOHLC(ctx context.Context, candles []*models.OH
 // Close closes the ClickHouse connection.
 func (s *clickhouseStorage) Close() error {
 	return s.conn.Close()
+}
+
+// CreateOHLC inserts OHLC candles using ClickHouse batch insert.
+func (s *clickhouseStorage) CreateDepths(ctx context.Context, depths []*models.Depth) error {
+	if len(depths) == 0 {
+		return nil
+	}
+
+	batch, err := s.conn.PrepareBatch(ctx, `
+		INSERT INTO depth (
+			snapshot_id, source, symbol,
+			price, volume, side,
+			last_update, inserted_at
+		)
+	`)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	for _, d := range depths {
+		err := batch.Append(
+			d.SnapshotID,
+			d.Source,
+			d.Symbol,
+			d.Price,
+			d.Volume,
+			d.Side,
+			d.LastUpdate,
+			now,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return batch.Send()
 }

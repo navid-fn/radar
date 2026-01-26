@@ -18,11 +18,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const (
-	wsURL             = "wss://ws.nobitex.ir/connection/websocket"
-	maxSymbolsPerConn = 100
-)
-
 type NobitexWS struct {
 	sender    *scraper.Sender
 	logger    *slog.Logger
