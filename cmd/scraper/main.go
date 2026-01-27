@@ -28,6 +28,8 @@ func main() {
 		Level: slog.LevelInfo,
 	}))
 
+	logger.Info("scraper service started ...")
+
 	// Kafka writer for trades
 	tradeWriter := &kafka.Writer{
 		Addr:         kafka.TCP(appConfig.KafkaTrade.Broker),
@@ -89,7 +91,7 @@ func main() {
 
 	// Register Depth scrapers
 	depthScrapers := []scraper.Scraper{
-		nobitex.NewNobitexDepthAPIScraper(depthWriter, logger),
+		nobitex.NewNobitexDepthScraper(depthWriter, logger),
 	}
 
 	scrapers := append(tradeScrapers, ohlcScrapers...)
@@ -125,6 +127,7 @@ func main() {
 		// context stop
 		defer stop()
 	}
+
 	defer shutdown()
 
 	// Wait for context cancellation (signal received)
