@@ -35,15 +35,15 @@ type TabdealAPI struct {
 
 func NewTabdealScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *TabdealAPI {
 	return &TabdealAPI{
-		sender:    scraper.NewSender(kafkaWriter, logger),
-		logger:    logger.With("scraper", "tabdeal"),
-		usdtPrice: getLatestUSDTPrice(),
+		sender: scraper.NewSender(kafkaWriter, logger),
+		logger: logger.With("scraper", "tabdeal"),
 	}
 }
 
 func (t *TabdealAPI) Name() string { return "tabdeal" }
 
 func (t *TabdealAPI) Run(ctx context.Context) error {
+	t.usdtPrice = getLatestUSDTPrice()
 	t.logger.Info("Starting Tabdeal scraper", "usdtPrice", t.usdtPrice)
 
 	symbols, err := t.fetchMarkets()

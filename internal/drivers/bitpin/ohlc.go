@@ -57,9 +57,8 @@ type BitpinOHLC struct {
 // NewBitpinOHLCScraper creates a new Nobitex OHLC scraper.
 func NewBitpinOHLCScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *BitpinOHLC {
 	return &BitpinOHLC{
-		sender:    scraper.NewSender(kafkaWriter, logger),
-		logger:    logger.With("scraper", "bipin-ohlc"),
-		usdtPrice: getLatestUSDTPrice(),
+		sender: scraper.NewSender(kafkaWriter, logger),
+		logger: logger.With("scraper", "bipin-ohlc"),
 	}
 }
 
@@ -72,9 +71,8 @@ func (n *BitpinOHLC) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to load Tehran timezone: %w", err)
 	}
-
 	n.logger.Info("Starting Bitpin OHLC scraper (scheduled daily at 4:30 AM Tehran)")
-
+	n.usdtPrice = getLatestUSDTPrice()
 	n.logger.Info("Executing initial startup fetch...")
 	if err := n.fetchAllSymbols(ctx); err != nil {
 		// Log error but don't crash; let the schedule continue

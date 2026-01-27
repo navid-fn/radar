@@ -33,13 +33,13 @@ func NewWallexScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *WallexWS 
 	return &WallexWS{
 		sender:    scraper.NewSender(kafkaWriter, logger),
 		logger:    logger.With("scraper", "wallex-ws"),
-		usdtPrice: getLatestUSDTPrice(),
 	}
 }
 
 func (w *WallexWS) Name() string { return "wallex" }
 
 func (w *WallexWS) Run(ctx context.Context) error {
+	w.usdtPrice = getLatestUSDTPrice()
 	w.logger.Info("Starting Wallex WebSocket scraper", "usdtPrice", w.usdtPrice)
 
 	markets, err := fetchMarkets(w.logger)

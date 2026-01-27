@@ -31,13 +31,13 @@ func NewWallexAPIScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *Wallex
 	return &WallexAPI{
 		sender:    scraper.NewSender(kafkaWriter, logger),
 		logger:    logger.With("scraper", "wallex-api"),
-		usdtPrice: getLatestUSDTPrice(),
 	}
 }
 
 func (w *WallexAPI) Name() string { return "wallex-api" }
 
 func (w *WallexAPI) Run(ctx context.Context) error {
+	w.usdtPrice = getLatestUSDTPrice()
 	w.logger.Info("Starting Wallex API scraper")
 
 	symbols, err := fetchMarkets(w.logger)

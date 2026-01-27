@@ -34,13 +34,13 @@ func NewNobitexScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *NobitexW
 	return &NobitexWS{
 		sender:    scraper.NewSender(kafkaWriter, logger),
 		logger:    logger.With("scraper", "nobitex-ws"),
-		usdtPrice: getLatestUSDTPrice(),
 	}
 }
 
 func (n *NobitexWS) Name() string { return "nobitex" }
 
 func (n *NobitexWS) Run(ctx context.Context) error {
+	n.usdtPrice = getLatestUSDTPrice()
 	n.logger.Info("Starting Nobitex WebSocket scraper", "usdtPrice", n.usdtPrice)
 
 	markets, err := fetchMarkets(n.logger)

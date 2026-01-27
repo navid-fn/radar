@@ -108,7 +108,6 @@ func NewRamzinexOHLCScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *Ram
 		sender:         scraper.NewSender(kafkaWriter, logger),
 		logger:         logger.With("scraper", "ramzinex-ohlc"),
 		symbolIDToName: make(map[int]string),
-		usdtPrice:      float64(getLatestUSDTPrice()),
 	}
 }
 
@@ -117,6 +116,7 @@ func (r *RamzinexOHLC) Name() string { return "ramzinex-ohlc" }
 // Run starts the OHLC scraper with a daily schedule at 4:30 AM Tehran time.
 // It waits until 4:30 AM, fetches all symbols, then waits for next day's 4:30 AM.
 func (r *RamzinexOHLC) Run(ctx context.Context) error {
+	r.usdtPrice = float64(getLatestUSDTPrice())
 	tehran, err := time.LoadLocation("Asia/Tehran")
 	if err != nil {
 		return fmt.Errorf("failed to load Tehran timezone: %w", err)

@@ -87,7 +87,6 @@ func NewWallexOHLCScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *Walle
 	return &WallexOHLC{
 		sender:    scraper.NewSender(kafkaWriter, logger),
 		logger:    logger.With("scraper", "wallex-ohlc"),
-		usdtPrice: getLatestUSDTPrice(),
 	}
 }
 
@@ -96,6 +95,7 @@ func (w *WallexOHLC) Name() string { return "wallex-ohlc" }
 // Run starts the OHLC scraper with a daily schedule at 4:30 AM Tehran time.
 // It waits until 4:30 AM, fetches all symbols, then waits for next day's 4:30 AM.
 func (w *WallexOHLC) Run(ctx context.Context) error {
+	w.usdtPrice = getLatestUSDTPrice()
 	tehran, err := time.LoadLocation("Asia/Tehran")
 	if err != nil {
 		return fmt.Errorf("failed to load Tehran timezone: %w", err)

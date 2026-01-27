@@ -31,13 +31,13 @@ func NewNobitexAPIScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *Nobit
 	return &NobitexAPI{
 		sender:    scraper.NewSender(kafkaWriter, logger),
 		logger:    logger.With("scraper", "nobitex-api"),
-		usdtPrice: getLatestUSDTPrice(),
 	}
 }
 
 func (n *NobitexAPI) Name() string { return "nobitex-api" }
 
 func (n *NobitexAPI) Run(ctx context.Context) error {
+	n.usdtPrice = getLatestUSDTPrice()
 	n.logger.Info("Starting Nobitex API scraper")
 
 	symbols, err := fetchMarkets(n.logger)

@@ -59,7 +59,6 @@ func NewNobitexOHLCScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *Nobi
 	return &NobitexOHLC{
 		sender:    scraper.NewSender(kafkaWriter, logger),
 		logger:    logger.With("scraper", "nobitex-ohlc"),
-		usdtPrice: getLatestUSDTPrice(),
 	}
 }
 
@@ -68,6 +67,7 @@ func (n *NobitexOHLC) Name() string { return "nobitex-ohlc" }
 // Run starts the OHLC scraper with a daily schedule at 4:30 AM Tehran time.
 // It waits until 4:30 AM, fetches all symbols, then waits for next day's 4:30 AM.
 func (n *NobitexOHLC) Run(ctx context.Context) error {
+	n.usdtPrice = getLatestUSDTPrice()
 	tehran, err := time.LoadLocation("Asia/Tehran")
 	if err != nil {
 		return fmt.Errorf("failed to load Tehran timezone: %w", err)

@@ -35,13 +35,13 @@ func NewRamzinexScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *Ramzine
 		sender:       scraper.NewSender(kafkaWriter, logger),
 		logger:       logger.With("scraper", "ramzinex-ws"),
 		pairIDToName: make(map[int]string),
-		usdtPrice:    float64(getLatestUSDTPrice()),
 	}
 }
 
 func (r *RamzinexWS) Name() string { return "ramzinex" }
 
 func (r *RamzinexWS) Run(ctx context.Context) error {
+	r.usdtPrice = float64(getLatestUSDTPrice())
 	r.logger.Info("Starting Ramzinex WebSocket scraper", "usdtPrice", r.usdtPrice)
 
 	pairs, err := r.fetchPairs()

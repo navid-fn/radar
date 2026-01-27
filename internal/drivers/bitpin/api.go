@@ -29,9 +29,8 @@ type BitpinAPI struct {
 
 func NewBitpinAPIScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *BitpinAPI {
 	return &BitpinAPI{
-		sender:    scraper.NewSender(kafkaWriter, logger),
-		logger:    logger.With("scraper", "bitpin-api"),
-		usdtPrice: getLatestUSDTPrice(),
+		sender: scraper.NewSender(kafkaWriter, logger),
+		logger: logger.With("scraper", "bitpin-api"),
 	}
 }
 
@@ -39,6 +38,7 @@ func (b *BitpinAPI) Name() string { return "bitpin-api" }
 
 func (b *BitpinAPI) Run(ctx context.Context) error {
 	b.logger.Info("Starting Bitpin API scraper")
+	b.usdtPrice = getLatestUSDTPrice()
 
 	symbols, err := fetchMarkets(b.logger)
 	if err != nil {
