@@ -17,11 +17,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const (
-	wsURL             = "wss://api.wallex.ir/ws"
-	maxSymbolsPerConn = 50
-)
-
 type WallexWS struct {
 	sender    *scraper.Sender
 	logger    *slog.Logger

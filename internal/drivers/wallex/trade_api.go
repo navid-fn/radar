@@ -17,8 +17,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const tradesAPI = "https://api.wallex.ir/v1/trades"
-
 type WallexAPI struct {
 	sender      *scraper.Sender
 	logger      *slog.Logger
@@ -83,7 +81,7 @@ func (w *WallexAPI) pollSymbol(ctx context.Context, symbol string) {
 }
 
 func (w *WallexAPI) fetchTrades(ctx context.Context, symbol string) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", tradesAPI+"?symbol="+symbol, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+tradesAPI+"?symbol="+symbol, nil)
 	if err != nil {
 		return err
 	}

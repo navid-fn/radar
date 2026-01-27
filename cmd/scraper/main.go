@@ -10,11 +10,6 @@ import (
 	"time"
 
 	"nobitex/radar/configs"
-	"nobitex/radar/internal/drivers/bitpin"
-	"nobitex/radar/internal/drivers/coingecko"
-	"nobitex/radar/internal/drivers/nobitex"
-	"nobitex/radar/internal/drivers/ramzinex"
-	"nobitex/radar/internal/drivers/tabdeal"
 	"nobitex/radar/internal/drivers/wallex"
 	"nobitex/radar/internal/scraper"
 
@@ -42,20 +37,8 @@ func main() {
 	}
 
 	// Register trade scrapers scrapers
-	tradeScrapers := []scraper.Scraper{
-		nobitex.NewNobitexScraper(tradeWriter, logger),
-		nobitex.NewNobitexAPIScraper(tradeWriter, logger),
-		wallex.NewWallexScraper(tradeWriter, logger),
-		wallex.NewWallexAPIScraper(tradeWriter, logger),
-		ramzinex.NewRamzinexScraper(tradeWriter, logger),
-		ramzinex.NewRamzinexAPIScraper(tradeWriter, logger),
-		bitpin.NewBitpinScraper(tradeWriter, logger),
-		bitpin.NewBitpinAPIScraper(tradeWriter, logger),
-		tabdeal.NewTabdealScraper(tradeWriter, logger),
-		coingecko.NewCoinGeckoScraper(tradeWriter, logger, &appConfig.Coingecko),
-	}
 
-	tradeScrapers = []scraper.Scraper{}
+	tradeScrapers := []scraper.Scraper{}
 
 	// Kafka writer for OHLC (separate topic)
 	ohlcWriter := &kafka.Writer{
@@ -69,14 +52,8 @@ func main() {
 	}
 
 	// Register OHLC scrapers
-	ohlcScrapers := []scraper.Scraper{
-		nobitex.NewNobitexOHLCScraper(ohlcWriter, logger),
-		wallex.NewWallexOHLCScraper(ohlcWriter, logger),
-		ramzinex.NewRamzinexOHLCScraper(ohlcWriter, logger),
-		bitpin.NewBitpinOHLCScraper(ohlcWriter, logger),
-	}
 
-	ohlcScrapers = []scraper.Scraper{}
+	ohlcScrapers := []scraper.Scraper{}
 
 	// Kafka writer for Depth (separate topic)
 	depthWriter := &kafka.Writer{
@@ -91,7 +68,8 @@ func main() {
 
 	// Register Depth scrapers
 	depthScrapers := []scraper.Scraper{
-		nobitex.NewNobitexDepthScraper(depthWriter, logger),
+		// nobitex.NewNobitexDepthScraper(depthWriter, logger),
+		wallex.NewWallexDepthScraper(depthWriter, logger),
 	}
 
 	scrapers := append(tradeScrapers, ohlcScrapers...)

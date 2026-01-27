@@ -79,8 +79,8 @@ func (n *NobitexDepthWS) onConnect(conn *websocket.Conn) error {
 }
 
 func (n *NobitexDepthWS) onSubscribe(conn *websocket.Conn, symbols []string) error {
-	for i, sym := range symbols {
-		msg := map[string]any{"id": i + 2, "subscribe": map[string]any{"channel": "public:orderbook-" + sym}}
+	for _, sym := range symbols {
+		msg := map[string]any{"id": 2, "subscribe": map[string]any{"channel": "public:orderbook-" + sym}}
 		if err := conn.WriteJSON(msg); err != nil {
 			return err
 		}
@@ -132,27 +132,39 @@ func (n *NobitexDepthWS) parseLine(conn *websocket.Conn, line []byte) *pb.OrderB
 	if push == nil {
 		return nil
 	}
+
 	pub, _ := push["pub"].(map[string]any)
 	if pub == nil {
 		return nil
 	}
-	data, result := pub["data"].(depthResponse)
-	if result == false {
+
+	dataMap, _ := pub["data"].(map[string]any)
+	if dataMap == nil {
 		return nil
 	}
 
-	channel, _ := push["channel"].(string)
-	symbol := ""
-	if len(channel) > 14 {
-		symbol = channel[14:]
+	jsonBytes, err := json.Marshal(dataMap)
+	if err != nil {
+		fmt.Println(err)
+		return nil
 	}
 
-	return n.createTrade(data, symbol)
+	var data depthResponse
+	json.Unmarshal(jsonBytes, &data)
+
+	channel, _ := push["channel"].(string)
+	symbol := ""
+	if len(channel) > 17 {
+		symbol = channel[17:]
+	}
+
+	return n.createDepth(data, symbol)
 }
 
-func (n *NobitexDepthWS) createTrade(data depthResponse, symbol string) *pb.OrderBookSnapshot {
-	lastUpdateInt := data.LastUpdate.(int64)
-	lastUpdate := scraper.TimestampToRFC3339(lastUpdateInt)
+func (n *NobitexDepthWS) createDepth(data depthResponse, symbol string) *pb.OrderBookSnapshot {
+	lastUpdateInt := data.LastUpdate.(float64)
+	lastUpdate := scraper.TimestampToRFC3339(int64(lastUpdateInt))
+	cleanedSymbol := scraper.NormalizeSymbol("nobitex", symbol)
 
 	asks := []*pb.OrderLevel{}
 	for _, a := range data.Asks {
@@ -181,9 +193,11 @@ func (n *NobitexDepthWS) createTrade(data depthResponse, symbol string) *pb.Orde
 		bids = append(asks, &pb.OrderLevel{Price: price, Volume: volume})
 	}
 	return &pb.OrderBookSnapshot{
-		Id:         scraper.GenerateSnapShotID("nobitex", symbol, lastUpdate),
+		Id:         scraper.GenerateSnapShotID("nobitex", cleanedSymbol, lastUpdate),
 		LastUpdate: lastUpdate,
 		Bids:       bids,
 		Asks:       asks,
+		Symbol:     cleanedSymbol,
+		Exchange:   "nobitex",
 	}
 }

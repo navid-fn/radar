@@ -104,6 +104,7 @@ func main() {
 	logger.Info("Ingester started",
 		"trade_topic", appConfig.KafkaTrade.Topic,
 		"ohlc_topic", appConfig.KafkaOHLC.Topic,
+		"depth_topic", appConfig.KafkaDepth.Topic,
 	)
 
 	// Run both ingesters in parallel
