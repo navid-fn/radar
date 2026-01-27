@@ -52,7 +52,6 @@ func main() {
 		Compression:  kafka.Zstd,
 	}
 
-	// Register OHLC scrapers
 	ohlcScrapers := []scraper.Scraper{}
 
 	// Kafka writer for Depth (separate topic)
