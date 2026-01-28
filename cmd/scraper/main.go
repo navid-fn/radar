@@ -66,7 +66,6 @@ func main() {
 		Async:        true,
 		Compression:  kafka.Zstd,
 	}
-	defer ohlcWriter.Close()
 
 	// Register OHLC scrapers
 	ohlcScrapers := []scraper.Scraper{
@@ -74,6 +73,7 @@ func main() {
 		wallex.NewWallexOHLCScraper(ohlcWriter, logger),
 		ramzinex.NewRamzinexOHLCScraper(ohlcWriter, logger),
 		bitpin.NewBitpinOHLCScraper(ohlcWriter, logger),
+		tabdeal.NewTabdealOHLCScraper(ohlcWriter, logger),
 	}
 
 	// Kafka writer for Depth (separate topic)
@@ -123,6 +123,7 @@ func main() {
 		// stop writers
 		defer tradeWriter.Close()
 		defer ohlcWriter.Close()
+		defer depthWriter.Close()
 		// context stop
 		defer stop()
 	}

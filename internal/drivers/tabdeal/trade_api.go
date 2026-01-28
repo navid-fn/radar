@@ -19,12 +19,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const (
-	tradesURL  = "https://api1.tabdeal.org/r/api/v1/trades"
-	marketsURL = "https://api1.tabdeal.org/r/api/v1/exchangeInfo"
-	limit      = 10
-)
-
 type TabdealAPI struct {
 	sender      *scraper.Sender
 	logger      *slog.Logger
@@ -46,7 +40,7 @@ func (t *TabdealAPI) Run(ctx context.Context) error {
 	t.usdtPrice = getLatestUSDTPrice()
 	t.logger.Info("Starting Tabdeal scraper", "usdtPrice", t.usdtPrice)
 
-	symbols, err := t.fetchMarkets()
+	symbols, err := fetchMarkets()
 	if err != nil {
 		return err
 	}
@@ -165,34 +159,6 @@ func (t *TabdealAPI) fetchTrades(ctx context.Context, symbol string) error {
 		}
 	}
 	return nil
-}
-
-func (t *TabdealAPI) fetchMarkets() ([]string, error) {
-	resp, err := scraper.HTTPClient.Get(marketsURL)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode >= 500 || isHTMLResponse(body) {
-		return nil, fmt.Errorf("gateway error")
-	}
-
-	var markets []market
-	if err := json.Unmarshal(body, &markets); err != nil {
-		return nil, err
-	}
-
-	var symbols []string
-	for _, m := range markets {
-		if m.Status == "TRADING" {
-			symbols = append(symbols, m.Symbol)
-		}
-	}
-	t.logger.Info("Fetched markets", "count", len(symbols))
-	return symbols, nil
 }
 
 func isHTMLResponse(body []byte) bool {

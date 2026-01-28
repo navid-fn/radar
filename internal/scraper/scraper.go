@@ -169,6 +169,14 @@ func (s *Sender) SendOHLC(ctx context.Context, ohlc *pb.OHLCData) error {
 	return s.Send(ctx, data)
 }
 
+func (s *Sender) SendOHLCBatch(ctx context.Context, candels []*pb.OHLCData) error {
+	data, err := proto.Marshal(&pb.OHLCDataBatch{Candles: candels})
+	if err != nil {
+		return fmt.Errorf("serialize batch failed: %w", err)
+	}
+	return s.Send(ctx, data)
+}
+
 // GenerateOHLCID creates a unique ID for an OHLC candle.
 // Format: exchange-symbol-interval-openTime
 func GenerateOHLCID(exchange, symbol, interval, openTime string) string {
