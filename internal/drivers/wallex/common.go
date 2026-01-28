@@ -24,6 +24,7 @@ const (
 	wsURL                  = "wss://api.wallex.ir/ws"
 	maxSymbolsPerConn      = 50
 	maxSymbolsPerConnDepth = 25
+
 )
 
 type market struct {
