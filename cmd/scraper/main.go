@@ -10,7 +10,11 @@ import (
 	"time"
 
 	"nobitex/radar/configs"
+	"nobitex/radar/internal/drivers/bitpin"
+	"nobitex/radar/internal/drivers/coingecko"
 	"nobitex/radar/internal/drivers/nobitex"
+	"nobitex/radar/internal/drivers/ramzinex"
+	"nobitex/radar/internal/drivers/tabdeal"
 	"nobitex/radar/internal/drivers/wallex"
 	"nobitex/radar/internal/scraper"
 
@@ -39,7 +43,18 @@ func main() {
 
 	// Register trade scrapers scrapers
 
-	tradeScrapers := []scraper.Scraper{}
+	tradeScrapers := []scraper.Scraper{
+		nobitex.NewNobitexScraper(tradeWriter, logger),
+		nobitex.NewNobitexAPIScraper(tradeWriter, logger),
+		wallex.NewWallexScraper(tradeWriter, logger),
+		wallex.NewWallexAPIScraper(tradeWriter, logger),
+		ramzinex.NewRamzinexScraper(tradeWriter, logger),
+		ramzinex.NewRamzinexAPIScraper(tradeWriter, logger),
+		bitpin.NewBitpinScraper(tradeWriter, logger),
+		bitpin.NewBitpinAPIScraper(tradeWriter, logger),
+		tabdeal.NewTabdealScraper(tradeWriter, logger),
+		coingecko.NewCoinGeckoScraper(tradeWriter, logger, &appConfig.Coingecko),
+	}
 
 	// Kafka writer for OHLC (separate topic)
 	ohlcWriter := &kafka.Writer{
@@ -51,8 +66,15 @@ func main() {
 		Async:        true,
 		Compression:  kafka.Zstd,
 	}
+	defer ohlcWriter.Close()
 
-	ohlcScrapers := []scraper.Scraper{}
+	// Register OHLC scrapers
+	ohlcScrapers := []scraper.Scraper{
+		nobitex.NewNobitexOHLCScraper(ohlcWriter, logger),
+		wallex.NewWallexOHLCScraper(ohlcWriter, logger),
+		ramzinex.NewRamzinexOHLCScraper(ohlcWriter, logger),
+		bitpin.NewBitpinOHLCScraper(ohlcWriter, logger),
+	}
 
 	// Kafka writer for Depth (separate topic)
 	depthWriter := &kafka.Writer{
@@ -70,8 +92,6 @@ func main() {
 		nobitex.NewNobitexDepthScraper(depthWriter, logger),
 		wallex.NewWallexDepthScraper(depthWriter, logger),
 	}
-
-	ohlcScrapers = []scraper.Scraper{}
 
 	scrapers := append(tradeScrapers, ohlcScrapers...)
 	scrapers = append(scrapers, depthScrapers...)
