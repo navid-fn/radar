@@ -42,3 +42,23 @@ message OHLCDataBatch {
   repeated OHLCData candles = 1;
 }
 
+// OrderLevel represents a single price level in the order book.
+// We keep this lightweight as it will be repeated hundreds of times.
+message OrderLevel {
+  double price = 1;
+  double volume = 2;
+}
+
+// OrderBookSnapshot represents the full state of the market depth at one moment.
+// Instead of repeating 'exchange' and 'symbol' for every row, we group them here.
+message OrderBookSnapshot {
+  string id = 1;           // Unique snapshot ID (UUID or generated)
+  string exchange = 2;     // Exchange name (e.g. "nobitex")
+  string symbol = 3;       // Trading pair (e.g. "BTC/IRT")
+  
+  repeated OrderLevel bids = 4; // List of Buy orders
+  repeated OrderLevel asks = 5; // List of Sell orders
+  
+  string last_update = 6;  // Exchange timestamp in RFC3339 format
+}
+

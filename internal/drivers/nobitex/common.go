@@ -12,11 +12,23 @@ import (
 )
 
 const (
-	marketAPI    = "https://apiv2.nobitex.ir/market/stats"
-	usdtPriceAPI = "https://apiv2.nobitex.ir/v3/orderbook/USDTIRT"
+	baseUrl = "https://apiv2.nobitex.ir/"
+
+	// depthAPI fetches orderbook data
+	// Doc: https://apidocs.nobitex.ir/#54977c5fca
+	depthAPI       = "v2/depth/"
+	marketAPI      = "market/stats"
+	usdtPriceAPI   = "orderbook/USDTIRT"
+	latestTradeAPI = "v2/trades/"
+
 	// ohlcAPI fetches OHLC data. Params: symbol, from (unix), to (unix)
 	// Doc: https://apidocs.nobitex.ir/#6ae2dae4a2
-	ohlcAPI = "https://apiv2.nobitex.ir/market/udf/history?symbol=%s&resolution=D&from=%d&to=%d"
+	ohlcAPI = "market/udf/history?symbol=%s&resolution=D&from=%d&to=%d"
+
+	// wsURl is for fetching data from websocket
+	// maxSymbolsPerConn is for maximum subscription per one websocket
+	wsURL             = "wss://ws.nobitex.ir/connection/websocket"
+	maxSymbolsPerConn = 100
 )
 
 type usdtPrice struct {
@@ -46,9 +58,15 @@ type marketDataAPIResponse struct {
 	Stats  map[string]symbolData
 }
 
+type depthResponse struct {
+	LastUpdate any        `json:"lastUpdate"`
+	Bids       [][]string `json:"bids"`
+	Asks       [][]string `json:"asks"`
+}
+
 // fetch tradeable markets to scrape
 func fetchMarkets(logger *slog.Logger) ([]string, error) {
-	resp, err := scraper.HTTPClient.Get(marketAPI)
+	resp, err := scraper.HTTPClient.Get(baseUrl + marketAPI)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +123,7 @@ func getTimeValue(m map[string]any, key string) string {
 }
 
 func getLatestUSDTPrice() float64 {
-	resp, err := scraper.HTTPClient.Get(usdtPriceAPI)
+	resp, err := scraper.HTTPClient.Get(baseUrl + usdtPriceAPI)
 	if err != nil {
 		return 0
 	}

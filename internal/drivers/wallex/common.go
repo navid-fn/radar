@@ -12,8 +12,19 @@ import (
 )
 
 const (
-	marketsAPI = "https://api.wallex.ir/hector/web/v1/markets"
-	ohlcAPI    = "https://api.wallex.ir/v1/udf/history?symbol=%s&resolution=D&from=%d&to=%d"
+	// base url
+	baseURL = "https://api.wallex.ir/"
+
+	// api urls for scraps
+	marketsAPI = "hector/web/v1/markets"
+	ohlcAPI    = "v1/udf/history?symbol=%s&resolution=D&from=%d&to=%d"
+	tradesAPI  = "v1/trades"
+
+	// ws url and confs for scrap
+	wsURL                  = "wss://api.wallex.ir/ws"
+	maxSymbolsPerConn      = 50
+	maxSymbolsPerConnDepth = 25
+
 )
 
 type market struct {
@@ -49,7 +60,7 @@ type tradeAPIResponse struct {
 }
 
 func fetchMarkets(logger *slog.Logger) ([]string, error) {
-	resp, err := scraper.HTTPClient.Get(marketsAPI)
+	resp, err := scraper.HTTPClient.Get(baseURL + marketsAPI)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +85,7 @@ func fetchMarkets(logger *slog.Logger) ([]string, error) {
 }
 
 func getLatestUSDTPrice() float64 {
-	resp, err := scraper.HTTPClient.Get(marketsAPI)
+	resp, err := scraper.HTTPClient.Get(baseURL + marketsAPI)
 	if err != nil {
 		return 0
 	}

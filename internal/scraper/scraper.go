@@ -216,3 +216,15 @@ func DoWithRetry(ctx context.Context, req *http.Request, maxRetries int, baseDel
 
 	return nil, fmt.Errorf("after %d retries: %w", maxRetries, lastErr)
 }
+
+func GenerateSnapShotID(source, symbol, lastUpdate string) string {
+	return fmt.Sprintf("%s-%s-%s", source, symbol, lastUpdate)
+}
+
+func (s *Sender) SendOrderBookSnapShot(ctx context.Context, orderBookSnapshot *pb.OrderBookSnapshot) error {
+	data, err := proto.Marshal(orderBookSnapshot)
+	if err != nil {
+		return fmt.Errorf("serialize failed: %w", err)
+	}
+	return s.Send(ctx, data)
+}

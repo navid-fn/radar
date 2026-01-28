@@ -57,8 +57,8 @@ type NobitexOHLC struct {
 // NewNobitexOHLCScraper creates a new Nobitex OHLC scraper.
 func NewNobitexOHLCScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *NobitexOHLC {
 	return &NobitexOHLC{
-		sender:    scraper.NewSender(kafkaWriter, logger),
-		logger:    logger.With("scraper", "nobitex-ohlc"),
+		sender: scraper.NewSender(kafkaWriter, logger),
+		logger: logger.With("scraper", "nobitex-ohlc"),
 	}
 }
 
@@ -144,7 +144,7 @@ func (n *NobitexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 	fromTimestamp := scraper.ToMidnight(time.Now().AddDate(0, 0, -30)).Unix()
 	toTimestamp := scraper.ToMidnight(time.Now()).AddDate(0, 0, -1).Unix()
 
-	url := fmt.Sprintf(ohlcAPI, symbol, fromTimestamp, toTimestamp)
+	url := fmt.Sprintf(baseUrl+ohlcAPI, symbol, fromTimestamp, toTimestamp)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err

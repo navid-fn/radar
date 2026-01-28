@@ -85,8 +85,8 @@ type WallexOHLC struct {
 // NewWallexOHLCScraper creates a new Nobitex OHLC scraper.
 func NewWallexOHLCScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *WallexOHLC {
 	return &WallexOHLC{
-		sender:    scraper.NewSender(kafkaWriter, logger),
-		logger:    logger.With("scraper", "wallex-ohlc"),
+		sender: scraper.NewSender(kafkaWriter, logger),
+		logger: logger.With("scraper", "wallex-ohlc"),
 	}
 }
 
@@ -172,7 +172,7 @@ func (w *WallexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 	fromTimestamp := scraper.ToMidnight(time.Now().AddDate(0, 0, -30)).Unix()
 	toTimestamp := scraper.ToMidnight(time.Now()).AddDate(0, 0, -1).Unix()
 
-	url := fmt.Sprintf(ohlcAPI, symbol, fromTimestamp, toTimestamp)
+	url := fmt.Sprintf(baseURL+ohlcAPI, symbol, fromTimestamp, toTimestamp)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err
