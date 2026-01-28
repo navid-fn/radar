@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"flag"
 	"log/slog"
 	"os"
 
@@ -17,6 +18,10 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
+
+	// migrations movement, up or down
+	migrations_type := flag.String("type", "up", "migrations to move (up or down)")
+	flag.Parse()
 
 	// Connect using native ClickHouse driver
 	db, err := sql.Open("clickhouse", cfg.DBDSN)
@@ -37,10 +42,28 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger.Info("Running database migrations...")
-	if err := goose.Up(db, "internal/migrations"); err != nil {
-		logger.Error("Goose migration failed", "error", err)
-		os.Exit(1)
+	switch *migrations_type {
+	case "up":
+		{
+			if err := goose.Up(db, "internal/migrations"); err != nil {
+				logger.Error("Goose migration failed", "error", err)
+				os.Exit(1)
+			}
+		}
+	case "down":
+		{
+			if err := goose.Down(db, "internal/migrations"); err != nil {
+				logger.Error("Goose migration failed", "error", err)
+				os.Exit(1)
+			}
+		}
+
+	default:
+		{
+			logger.Error("Goose migration failed", "error", err)
+			os.Exit(1)
+		}
+
 	}
 
 	logger.Info("Migrations completed successfully")

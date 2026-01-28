@@ -198,9 +198,8 @@ func (ti *DepthIngester) transform(p *pb.OrderLevel, side string) (*models.Depth
 	}
 
 	return &models.Depth{
-		Side:       side,
-		Price:      p.Price,
-		Volume:     p.Volume,
-		InsertedAt: time.Now(),
+		Side:   side,
+		Price:  p.Price,
+		Volume: p.Volume,
 	}, nil
 }

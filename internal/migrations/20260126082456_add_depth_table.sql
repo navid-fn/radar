@@ -8,7 +8,6 @@ CREATE TABLE IF NOT EXISTS radar.depth (
     price Float64 CODEC(ZSTD(1)),
     volume Float64 CODEC(ZSTD(1)),
     last_update DateTime('Asia/Tehran'),
-    inserted_at DateTime('Asia/Tehran') DEFAULT now()
 ) ENGINE = MergeTree()
 ORDER BY (source, symbol, snapshot_id, side)
 SETTINGS merge_with_ttl_timeout = 3600,

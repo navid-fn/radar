@@ -25,7 +25,4 @@ type Depth struct {
 
 	// UpdatedAt is time that api return when they updated their orderbook response.
 	LastUpdate time.Time `json:"last_update"`
-
-	// InsertedAt is when the record was inserted into our database.
-	InsertedAt time.Time `json:"inserted_at"`
 }

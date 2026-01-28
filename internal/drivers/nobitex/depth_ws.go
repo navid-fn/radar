@@ -190,7 +190,7 @@ func (n *NobitexDepthWS) createDepth(data depthResponse, symbol string) *pb.Orde
 		if volume == 0 {
 			continue
 		}
-		bids = append(asks, &pb.OrderLevel{Price: price, Volume: volume})
+		bids = append(asks, &pb.OrderLevel{Price: scraper.NormalizePrice(cleanedSymbol, price), Volume: volume})
 	}
 	return &pb.OrderBookSnapshot{
 		Id:         scraper.GenerateSnapShotID("nobitex", cleanedSymbol, lastUpdate),
