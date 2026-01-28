@@ -13,7 +13,7 @@ import (
 
 const (
 	marketsAPI = "https://api.wallex.ir/hector/web/v1/markets"
-	ohlcAPI = "https://api.wallex.ir/v1/udf/history?symbol=%s&resolution=D&from=%d&to=%d"
+	ohlcAPI    = "https://api.wallex.ir/v1/udf/history?symbol=%s&resolution=D&from=%d&to=%d"
 )
 
 type market struct {
@@ -66,9 +66,7 @@ func fetchMarkets(logger *slog.Logger) ([]string, error) {
 
 	var markets []string
 	for _, m := range data.Result.Markets {
-		if m.Enabled {
-			markets = append(markets, m.Symbol)
-		}
+		markets = append(markets, m.Symbol)
 	}
 	sort.Strings(markets)
 	logger.Info("Fetched markets", "count", len(markets))
