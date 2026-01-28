@@ -157,14 +157,13 @@ func (s *clickhouseStorage) CreateDepths(ctx context.Context, depths []*models.D
 		INSERT INTO depth (
 			snapshot_id, source, symbol,
 			price, volume, side,
-			last_update, inserted_at
+			last_update
 		)
 	`)
 	if err != nil {
 		return err
 	}
 
-	now := time.Now()
 	for _, d := range depths {
 		err := batch.Append(
 			d.SnapshotID,
@@ -174,7 +173,6 @@ func (s *clickhouseStorage) CreateDepths(ctx context.Context, depths []*models.D
 			d.Volume,
 			d.Side,
 			d.LastUpdate,
-			now,
 		)
 		if err != nil {
 			return err
