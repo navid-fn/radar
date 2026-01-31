@@ -49,5 +49,5 @@ USER appuser
 WORKDIR /app
 COPY --from=builder /bin/migrate /app/migrate
 COPY --from=builder /app/internal/migrations /app/internal/migrations
-ENTRYPOINT ["/app/migrate -type=up"]
+ENTRYPOINT ["/app/migrate"]
 

@@ -60,8 +60,10 @@ func main() {
 
 	default:
 		{
-			logger.Error("Goose migration failed", "error", err)
-			os.Exit(1)
+			if err := goose.Up(db, "internal/migrations"); err != nil {
+				logger.Error("Goose migration failed", "error", err)
+				os.Exit(1)
+			}
 		}
 
 	}
