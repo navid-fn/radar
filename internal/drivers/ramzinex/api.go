@@ -40,7 +40,7 @@ func (r *RamzinexAPI) Name() string { return "ramzinex-api" }
 
 func (r *RamzinexAPI) Run(ctx context.Context) error {
 	r.usdtPrice = float64(getLatestUSDTPrice())
-	r.logger.Info("Starting Ramzinex API scraper")
+	r.logger.Info("starting Ramzinex API scraper")
 
 	pairs, pairMap, err := fetchPairs()
 	if err != nil {
@@ -135,7 +135,8 @@ func (r *RamzinexAPI) fetchTrades(ctx context.Context, pairID int) error {
 		}
 
 		if err := r.sender.SendTrade(ctx, trade); err != nil {
-			r.logger.Debug("Send error", "error", err)
+			// TODO: add metric
+			r.logger.Debug("send error", "error", err)
 		}
 	}
 	return nil

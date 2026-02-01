@@ -42,7 +42,7 @@ func (r *RamzinexWS) Name() string { return "ramzinex" }
 
 func (r *RamzinexWS) Run(ctx context.Context) error {
 	r.usdtPrice = float64(getLatestUSDTPrice())
-	r.logger.Info("Starting Ramzinex WebSocket scraper", "usdtPrice", r.usdtPrice)
+	r.logger.Info("starting Ramzinex WebSocket scraper", "usdtPrice", r.usdtPrice)
 
 	pairs, err := r.fetchPairs()
 	if err != nil {
@@ -102,7 +102,6 @@ func (r *RamzinexWS) onSubscribe(conn *websocket.Conn, pairIDs []string) error {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	r.logger.Info("Subscribed", "count", len(pairIDs))
 	return nil
 }
 

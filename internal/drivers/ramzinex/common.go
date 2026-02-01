@@ -10,7 +10,7 @@ import (
 const (
 	pairsAPI     = "https://api.ramzinex.com/exchange/api/v2.0/exchange/pairs"
 	usdtPriceAPI = "https://publicapi.ramzinex.com/exchange/api/v1.0/exchange/orderbooks/11/market_sell_price"
-	ohlcAPI      = "https://publicapi.ramzinex.com/exchange/api/v1.0/exchange/chart/tv/history?symbol=%s&resolution=1D&from=%d&to=%d"
+	ohlcURL      = "https://publicapi.ramzinex.com/exchange/api/v1.0/exchange/chart/tv/v2.0/history"
 )
 
 type pairName struct {

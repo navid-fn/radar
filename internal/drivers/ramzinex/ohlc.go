@@ -68,6 +68,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -122,12 +124,11 @@ func (r *RamzinexOHLC) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to load Tehran timezone: %w", err)
 	}
 
-	r.logger.Info("Starting Ramzinex OHLC scraper (scheduled daily at 4:30 AM Tehran)")
+	r.logger.Info("starting Ramzinex OHLC scraper (scheduled daily at 4:30 AM Tehran)")
 
-	r.logger.Info("Executing initial startup fetch...")
 	if err := r.fetchAllSymbols(ctx); err != nil {
 		// Log error but don't crash; let the schedule continue
-		r.logger.Error("Initial OHLC fetch failed", "error", err)
+		r.logger.Error("initial OHLC fetch failed", "error", err)
 	}
 
 	for {
@@ -138,13 +139,12 @@ func (r *RamzinexOHLC) Run(ctx context.Context) error {
 			next = next.Add(24 * time.Hour)
 		}
 
-		r.logger.Info("Next OHLC fetch scheduled", "at", next.Format(time.RFC3339), "in", time.Until(next).Round(time.Minute))
+		r.logger.Info("next OHLC fetch scheduled", "at", next.Format(time.RFC3339), "in", time.Until(next).Round(time.Minute))
 
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-time.After(time.Until(next)):
-			r.logger.Info("Starting daily OHLC fetch")
 			if err := r.fetchAllSymbols(ctx); err != nil {
 				r.logger.Error("OHLC fetch failed", "error", err)
 			}
@@ -164,7 +164,6 @@ func (r *RamzinexOHLC) fetchAllSymbols(ctx context.Context) error {
 	}
 
 	r.rateLimiter = scraper.DefaultRateLimiter()
-	r.logger.Info("Fetching OHLC for symbols", "count", len(symbols))
 
 	for _, symbol := range symbols {
 		select {
@@ -178,7 +177,8 @@ func (r *RamzinexOHLC) fetchAllSymbols(ctx context.Context) error {
 		}
 
 		if err := r.fetchOHLC(ctx, strings.ToUpper(symbol.Name)); err != nil {
-			r.logger.Warn("Failed to fetch OHLC", "symbol", symbol, "error", err)
+			// TODO: add metric
+			r.logger.Warn("failed to fetch OHLC", "symbol", symbol, "error", err)
 			continue
 		}
 	}
@@ -187,14 +187,28 @@ func (r *RamzinexOHLC) fetchAllSymbols(ctx context.Context) error {
 	return nil
 }
 
-// fetchOHLC fetches OHLC data for a single symbol (last 30 days).
-// Retries up to 3 times on timeout/connection errors with 2 second delay.
-func (r *RamzinexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
+// create url with encoded params
+func (r *RamzinexOHLC) createURL(symbol string) string {
 	// Fetch last 30 days of daily OHLC
 	fromTimestamp := scraper.ToMidnight(time.Now().AddDate(0, 0, -30)).Unix()
 	toTimestamp := scraper.ToMidnight(time.Now()).AddDate(0, 0, -1).Unix()
 
-	url := fmt.Sprintf(ohlcAPI, symbol, fromTimestamp, toTimestamp)
+	params := url.Values{}
+	params.Add("symbol", symbol)
+	params.Add("resolution", "1D")
+	params.Add("from", strconv.FormatInt(fromTimestamp, 10))
+	params.Add("to", strconv.FormatInt(toTimestamp, 10))
+
+	fullURL := ohlcURL + "?" + params.Encode()
+
+	return fullURL
+
+}
+
+// fetchOHLC fetches OHLC data for a single symbol (last 30 days).
+// Retries up to 3 times on timeout/connection errors with 2 second delay.
+func (r *RamzinexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
+	url := r.createURL(symbol)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err
@@ -207,6 +221,7 @@ func (r *RamzinexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		fmt.Println(url)
 		return fmt.Errorf("status %d", resp.StatusCode)
 	}
 
@@ -216,7 +231,8 @@ func (r *RamzinexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 	}
 
 	if data.Status != "ok" {
-		return fmt.Errorf("API returned status: %s", data.Status)
+		// there is no_data returned. No need for send error
+		return nil
 	}
 
 	// Validate parallel arrays have same length
@@ -257,7 +273,8 @@ func (r *RamzinexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 		}
 
 		if err := r.sender.SendOHLC(ctx, ohlc); err != nil {
-			r.logger.Debug("Send error", "error", err)
+			// TODO: add metric
+			r.logger.Debug("send error", "error", err)
 		}
 	}
 
