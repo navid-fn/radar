@@ -58,7 +58,7 @@ type tradeAPIResponse struct {
 }
 
 func fetchMarkets() ([]string, error) {
-	resp, err := scraper.HTTPClient.Get(baseURL + marketsAPI)
+	resp, err := scraper.HTTPClient.Get(marketsAPI)
 	if err != nil {
 		return nil, err
 	}
