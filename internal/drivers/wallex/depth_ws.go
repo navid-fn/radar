@@ -85,7 +85,7 @@ func (w *WallexDepthWS) Name() string { return "wallex-depth" }
 //
 // The method blocks until the context is cancelled.
 func (w *WallexDepthWS) Run(ctx context.Context) error {
-	w.logger.Info("Starting Wallex depth WebSocket scraper",
+	w.logger.Info("starting Wallex depth WebSocket scraper",
 		"snapshot_interval", snapshotInterval)
 
 	// Fetch available markets
@@ -96,8 +96,6 @@ func (w *WallexDepthWS) Run(ctx context.Context) error {
 	if len(markets) == 0 {
 		return fmt.Errorf("no markets found")
 	}
-
-	w.logger.Info("Markets loaded for depth collection", "count", len(markets))
 
 	// Chunk markets to respect connection limits
 	chunks := scraper.ChunkSlice(markets, maxSymbolsPerConnDepth)
@@ -135,7 +133,6 @@ func (w *WallexDepthWS) onSubscribe(conn *websocket.Conn, symbols []string) erro
 			return err
 		}
 	}
-	w.logger.Info("Subscribed to depth channels", "symbols", len(symbols))
 	return nil
 }
 
@@ -253,20 +250,15 @@ func (w *WallexDepthWS) sendMinuteSnapshots(snapshotTime time.Time) {
 		// Serialize and send
 		data, err := proto.Marshal(snapshot)
 		if err != nil {
-			w.logger.Error("Failed to marshal snapshot", "symbol", symbol, "error", err)
+			w.logger.Error("failed to marshal snapshot", "symbol", symbol, "error", err)
 			continue
 		}
 
 		if err := w.sender.Send(context.Background(), data); err != nil {
-			w.logger.Error("Failed to send snapshot", "symbol", symbol, "error", err)
+			w.logger.Error("failed to send snapshot", "symbol", symbol, "error", err)
 			continue
 		}
 
 		sentCount++
 	}
-
-	w.logger.Info("Sent minute snapshots",
-		"time", timeStr,
-		"sent", sentCount,
-		"skipped", skippedCount)
 }

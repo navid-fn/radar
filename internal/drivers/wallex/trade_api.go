@@ -47,7 +47,7 @@ func (w *WallexAPI) Run(ctx context.Context) error {
 	}
 
 	w.rateLimiter = scraper.DefaultRateLimiter()
-	w.logger.Info("Rate limiter configured", "symbols", len(symbols))
+	w.logger.Info("rate limiter configured", "symbols", len(symbols))
 
 	var wg sync.WaitGroup
 	for _, sym := range symbols {
@@ -74,7 +74,8 @@ func (w *WallexAPI) pollSymbol(ctx context.Context, symbol string) {
 		}
 
 		if err := w.fetchTrades(ctx, symbol); err != nil {
-			w.logger.Debug("Fetch error", "symbol", symbol, "error", err)
+			// TODO: add metric
+			w.logger.Debug("fetch error", "symbol", symbol, "error", err)
 			time.Sleep(2 * time.Second)
 		}
 	}

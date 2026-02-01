@@ -71,12 +71,11 @@ func (n *BitpinOHLC) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to load Tehran timezone: %w", err)
 	}
-	n.logger.Info("Starting Bitpin OHLC scraper (scheduled daily at 4:30 AM Tehran)")
+	n.logger.Info("starting Bitpin OHLC scraper (scheduled daily at 4:30 AM Tehran)")
 	n.usdtPrice = getLatestUSDTPrice()
-	n.logger.Info("Executing initial startup fetch...")
 	if err := n.fetchAllSymbols(ctx); err != nil {
 		// Log error but don't crash; let the schedule continue
-		n.logger.Error("Initial OHLC fetch failed", "error", err)
+		n.logger.Error("initial OHLC fetch failed", "error", err)
 	}
 
 	for {
@@ -87,13 +86,12 @@ func (n *BitpinOHLC) Run(ctx context.Context) error {
 			next = next.Add(24 * time.Hour)
 		}
 
-		n.logger.Info("Next OHLC fetch scheduled", "at", next.Format(time.RFC3339), "in", time.Until(next).Round(time.Minute))
+		n.logger.Info("next OHLC fetch scheduled", "at", next.Format(time.RFC3339), "in", time.Until(next).Round(time.Minute))
 
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-time.After(time.Until(next)):
-			n.logger.Info("Starting daily OHLC fetch")
 			if err := n.fetchAllSymbols(ctx); err != nil {
 				n.logger.Error("OHLC fetch failed", "error", err)
 			}
@@ -112,7 +110,7 @@ func (n *BitpinOHLC) fetchAllSymbols(ctx context.Context) error {
 	}
 
 	n.rateLimiter = scraper.DefaultRateLimiter()
-	n.logger.Info("Fetching OHLC for symbols", "count", len(symbols))
+	n.logger.Info("fetching OHLC for symbols", "count", len(symbols))
 
 	for _, symbol := range symbols {
 		select {
@@ -217,7 +215,7 @@ func (n *BitpinOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 		}
 
 		if err := n.sender.SendOHLC(ctx, ohlc); err != nil {
-			n.logger.Debug("Send error", "error", err)
+			n.logger.Debug("send error", "error", err)
 		}
 	}
 

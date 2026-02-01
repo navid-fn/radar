@@ -39,7 +39,7 @@ func (b *BitpinWS) Name() string { return "bitpin" }
 
 func (b *BitpinWS) Run(ctx context.Context) error {
 	b.usdtPrice = getLatestUSDTPrice()
-	b.logger.Info("Starting Bitpin WebSocket scraper", "usdtPrice", b.usdtPrice)
+	b.logger.Info("starting Bitpin WebSocket scraper", "usdtPrice", b.usdtPrice)
 	symbols, err := fetchMarkets(b.logger)
 	if err != nil {
 		return err
@@ -80,7 +80,6 @@ func (b *BitpinWS) onSubscribe(conn *websocket.Conn, symbols []string) error {
 			return err
 		}
 	}
-	b.logger.Info("Subscribed", "count", len(symbols))
 	return nil
 }
 

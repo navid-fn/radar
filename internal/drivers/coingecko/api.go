@@ -65,21 +65,21 @@ func NewCoinGeckoScraper(kafkaWriter *kafka.Writer, logger *slog.Logger, cfg *co
 func (c *CoinGeckoScraper) Name() string { return "coingecko" }
 
 func (c *CoinGeckoScraper) Run(ctx context.Context) error {
-	c.logger.Info("Starting CoinGecko scraper", "exchanges", c.exchanges, "scheduleHour", c.scheduleHour)
+	c.logger.Info("starting CoinGecko scraper", "exchanges", c.exchanges, "scheduleHour", c.scheduleHour)
 
 	if len(c.exchanges) == 0 {
 		return fmt.Errorf("no exchanges configured")
 	}
 
 	nextRun := c.nextRunTime()
-	c.logger.Info("Scheduled", "nextRun", nextRun.Format(time.RFC3339))
+	c.logger.Info("scheduled", "nextRun", nextRun.Format(time.RFC3339))
 
 	select {
 	case <-ctx.Done():
 		return nil
 	case <-time.After(time.Until(nextRun)):
 		if err := c.fetchAndSend(ctx); err != nil && ctx.Err() == nil {
-			c.logger.Error("Fetch failed", "error", err)
+			c.logger.Error("fetch failed", "error", err)
 		}
 	}
 
@@ -92,7 +92,8 @@ func (c *CoinGeckoScraper) Run(ctx context.Context) error {
 			return nil
 		case <-ticker.C:
 			if err := c.fetchAndSend(ctx); err != nil && ctx.Err() == nil {
-				c.logger.Error("Fetch failed", "error", err)
+				// TODO: add metric
+				c.logger.Error("fetch failed", "error", err)
 			}
 		}
 	}
@@ -113,8 +114,6 @@ func (c *CoinGeckoScraper) nextRunTime() time.Time {
 }
 
 func (c *CoinGeckoScraper) fetchAndSend(ctx context.Context) error {
-	c.logger.Info("Fetching tickers...")
-
 	totalSent := 0
 	for _, exchange := range c.exchanges {
 		page := 1
@@ -134,8 +133,6 @@ func (c *CoinGeckoScraper) fetchAndSend(ctx context.Context) error {
 				break
 			}
 
-			c.logger.Info("Fetched page", "exchange", exchange, "page", page, "tickers", len(tickers))
-
 			sent := c.sendUSDPairs(ctx, tickers, exchange)
 			totalSent += sent
 
@@ -153,7 +150,7 @@ func (c *CoinGeckoScraper) fetchAndSend(ctx context.Context) error {
 		}
 	}
 
-	c.logger.Info("Completed", "totalSent", totalSent)
+	c.logger.Info("completed", "totalSent", totalSent)
 	return nil
 }
 
@@ -196,7 +193,7 @@ func (c *CoinGeckoScraper) fetchPage(page int, exchange string) ([]Ticker, error
 	url := fmt.Sprintf("%s/exchanges/%s/tickers?page=%d&order=base_target", baseURL, exchange, page)
 
 	var lastErr error
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		if attempt > 0 {
 			c.logger.Warn("Retry", "attempt", attempt, "page", page)
 		}

@@ -208,7 +208,8 @@ func (n *NobitexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 		}
 
 		if err := n.sender.SendOHLC(ctx, ohlc); err != nil {
-			n.logger.Debug("Send error", "error", err)
+			// TODO: add metric
+			n.logger.Debug("send error", "error", err)
 		}
 	}
 

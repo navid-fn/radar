@@ -72,10 +72,8 @@ func (r *TabdealOHLC) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to load Tehran timezone: %w", err)
 	}
-
 	r.logger.Info("starting tabdeal OHLC scraper (scheduled daily at 4:30 AM Tehran)")
 
-	r.logger.Info("executing initial startup fetch...")
 	if err := r.fetchAllSymbols(ctx); err != nil {
 		// Log error but don't crash; let the schedule continue
 		r.logger.Error("initial OHLC fetch failed", "error", err)
@@ -95,7 +93,6 @@ func (r *TabdealOHLC) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-time.After(time.Until(next)):
-			r.logger.Info("starting daily OHLC fetch")
 			if err := r.fetchAllSymbols(ctx); err != nil {
 				r.logger.Error("ohlc fetch failed", "error", err)
 			}
@@ -115,7 +112,6 @@ func (r *TabdealOHLC) fetchAllSymbols(ctx context.Context) error {
 	}
 
 	r.rateLimiter = scraper.DefaultRateLimiter()
-	r.logger.Info("fetching OHLC for symbols", "count", len(symbols))
 
 	for _, symbol := range symbols {
 		select {
@@ -192,7 +188,8 @@ func (r *TabdealOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 	// Convert each candle to proto and send
 
 	if err := r.sender.SendOHLCBatch(ctx, candles); err != nil {
-		r.logger.Debug("Send error", "error", err)
+		// TODO: add metric
+		r.logger.Debug("send error", "error", err)
 	}
 
 	return nil

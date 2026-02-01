@@ -145,7 +145,8 @@ func (n *NobitexDepthAPI) fetchDepths(ctx context.Context, symbol string) error 
 	}
 
 	if err := n.sender.SendOrderBookSnapShot(ctx, orderBookSnapShot); err != nil {
-		n.logger.Debug("Send error", "error", err)
+		// TODO: add metric
+		n.logger.Debug("send error", "error", err)
 	}
 
 	return nil

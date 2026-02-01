@@ -139,7 +139,6 @@ func (n *NobitexDepthWS) onSubscribe(conn *websocket.Conn, symbols []string) err
 			return err
 		}
 	}
-	n.logger.Info("Subscribed to orderbook channels", "symbols", len(symbols))
 	return nil
 }
 
@@ -208,7 +207,8 @@ func (n *NobitexDepthWS) sendMinuteSnapshots(snapshotTime time.Time) {
 		}
 
 		if err := n.sender.Send(context.Background(), data); err != nil {
-			n.logger.Error("Failed to send snapshot", "symbol", symbol, "error", err)
+			// TODO: add metric
+			n.logger.Error("failed to send snapshot", "symbol", symbol, "error", err)
 			continue
 		}
 

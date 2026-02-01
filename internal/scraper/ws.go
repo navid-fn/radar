@@ -66,6 +66,9 @@ type WSClient struct {
 	sender  *Sender
 	logger  *slog.Logger
 	mu      sync.Mutex // Protects concurrent writes to WebSocket
+	// TODO: add symbols to client to check what symbols in
+	// websocket got error more
+	// symbols  []string
 }
 
 // NewWSClient creates a new WebSocket client with the given configuration.
@@ -260,17 +263,17 @@ func RunWorkers(
 ) {
 	var wg sync.WaitGroup
 
+	logger.Info("starting workers", "workers", len(symbolChunks))
+
 	for i, chunk := range symbolChunks {
 		wg.Add(1)
 		go func(idx int, symbols []string) {
 			defer wg.Done()
 
 			client := createClient()
-			workerID := fmt.Sprintf("%s-%d", workerName, idx)
-			logger.Info("Starting worker", "id", workerID, "symbols", len(symbols))
 
 			if err := client.Run(ctx, symbols); err != nil {
-				logger.Error("Worker stopped", "id", workerID, "error", err)
+				logger.Error("worker stopped", "error", err)
 			}
 		}(i, chunk)
 

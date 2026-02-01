@@ -35,7 +35,7 @@ func (w *WallexWS) Name() string { return "wallex" }
 
 func (w *WallexWS) Run(ctx context.Context) error {
 	w.usdtPrice = getLatestUSDTPrice()
-	w.logger.Info("Starting Wallex WebSocket scraper", "usdtPrice", w.usdtPrice)
+	w.logger.Info("starting Wallex WebSocket scraper", "usdtPrice", w.usdtPrice)
 
 	markets, err := fetchMarkets()
 	if err != nil {
@@ -69,7 +69,6 @@ func (w *WallexWS) onSubscribe(conn *websocket.Conn, symbols []string) error {
 			return err
 		}
 	}
-	w.logger.Info("Subscribed", "count", len(symbols))
 	return nil
 }
 

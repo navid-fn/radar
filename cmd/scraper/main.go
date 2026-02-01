@@ -111,29 +111,29 @@ func main() {
 		wg.Add(1)
 		go func(s scraper.Scraper) {
 			defer wg.Done()
-			logger.Info("Starting scraper", "name", s.Name())
+			logger.Info("starting scraper", "name", s.Name())
 			if err := s.Run(ctx); err != nil && ctx.Err() == nil {
-				logger.Error("Scraper failed", "name", s.Name(), "error", err)
+				logger.Error("scraper failed", "name", s.Name(), "error", err)
 			}
 		}(s)
 	}
 
 	// shutdown function
 	shutdown := func() {
-		// stop writers
+		// stop kafka writers
 		defer tradeWriter.Close()
 		defer ohlcWriter.Close()
 		defer depthWriter.Close()
-		// context stop
+		// context signal stop
 		defer stop()
 	}
 	defer shutdown()
 
 	// Wait for context cancellation (signal received)
 	<-ctx.Done()
-	logger.Warn("Shutdown signal received, stopping scrapers...")
+	logger.Warn("shutdown signal received, stopping scrapers...")
 
 	// Wait for all scrapers to finish
 	wg.Wait()
-	logger.Info("All scrapers stopped")
+	logger.Info("all scrapers stopped")
 }

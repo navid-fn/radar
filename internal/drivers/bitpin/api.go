@@ -37,7 +37,7 @@ func NewBitpinAPIScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *Bitpin
 func (b *BitpinAPI) Name() string { return "bitpin-api" }
 
 func (b *BitpinAPI) Run(ctx context.Context) error {
-	b.logger.Info("Starting Bitpin API scraper")
+	b.logger.Info("starting Bitpin API scraper")
 	b.usdtPrice = getLatestUSDTPrice()
 
 	symbols, err := fetchMarkets(b.logger)
@@ -136,7 +136,7 @@ func (b *BitpinAPI) fetchTrades(ctx context.Context, symbol string) error {
 			UsdtPrice: b.usdtPrice,
 		}
 		if err := b.sender.SendTrade(ctx, trade); err != nil {
-			b.logger.Debug("Send error", "error", err)
+			b.logger.Debug("send error", "error", err)
 		}
 	}
 

@@ -101,12 +101,11 @@ func (w *WallexOHLC) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to load Tehran timezone: %w", err)
 	}
 
-	w.logger.Info("Starting Wallex OHLC scraper (scheduled daily at 4:30 AM Tehran)")
+	w.logger.Info("starting Wallex OHLC scraper (scheduled daily at 4:30 AM Tehran)")
 
-	w.logger.Info("Executing initial startup fetch...")
 	if err := w.fetchAllSymbols(ctx); err != nil {
 		// Log error but don't crash; let the schedule continue
-		w.logger.Error("Initial OHLC fetch failed", "error", err)
+		w.logger.Error("initial OHLC fetch failed", "error", err)
 	}
 
 	for {
@@ -117,13 +116,12 @@ func (w *WallexOHLC) Run(ctx context.Context) error {
 			next = next.Add(24 * time.Hour)
 		}
 
-		w.logger.Info("Next OHLC fetch scheduled", "at", next.Format(time.RFC3339), "in", time.Until(next).Round(time.Minute))
+		w.logger.Info("next OHLC fetch scheduled", "at", next.Format(time.RFC3339), "in", time.Until(next).Round(time.Minute))
 
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-time.After(time.Until(next)):
-			w.logger.Info("Starting daily OHLC fetch")
 			if err := w.fetchAllSymbols(ctx); err != nil {
 				w.logger.Error("OHLC fetch failed", "error", err)
 			}
@@ -142,7 +140,6 @@ func (w *WallexOHLC) fetchAllSymbols(ctx context.Context) error {
 	}
 
 	w.rateLimiter = scraper.DefaultRateLimiter()
-	w.logger.Info("Fetching OHLC for symbols", "count", len(symbols))
 
 	for _, symbol := range symbols {
 		select {
@@ -156,7 +153,7 @@ func (w *WallexOHLC) fetchAllSymbols(ctx context.Context) error {
 		}
 
 		if err := w.fetchOHLC(ctx, symbol); err != nil {
-			w.logger.Warn("Failed to fetch OHLC", "symbol", symbol, "error", err)
+			w.logger.Warn("failed to fetch OHLC", "symbol", symbol, "error", err)
 			continue
 		}
 	}
@@ -258,7 +255,8 @@ func (w *WallexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 		}
 
 		if err := w.sender.SendOHLC(ctx, ohlc); err != nil {
-			w.logger.Debug("Send error", "error", err)
+			// TODO: add metric
+			w.logger.Debug("send error", "error", err)
 		}
 	}
 

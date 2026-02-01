@@ -131,7 +131,8 @@ func (n *NobitexAPI) fetchTrades(ctx context.Context, symbol string) error {
 		}
 
 		if err := n.sender.SendTrade(ctx, trade); err != nil {
-			n.logger.Debug("Send error", "error", err)
+			// TODO: add metric
+			n.logger.Debug("send error", "error", err)
 		}
 	}
 	return nil

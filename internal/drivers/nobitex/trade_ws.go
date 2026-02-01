@@ -36,7 +36,7 @@ func (n *NobitexWS) Name() string { return "nobitex" }
 
 func (n *NobitexWS) Run(ctx context.Context) error {
 	n.usdtPrice = getLatestUSDTPrice()
-	n.logger.Info("Starting Nobitex WebSocket scraper", "usdtPrice", n.usdtPrice)
+	n.logger.Info("starting Nobitex WebSocket scraper", "usdtPrice", n.usdtPrice)
 
 	markets, err := fetchMarkets()
 	if err != nil {
@@ -75,7 +75,6 @@ func (n *NobitexWS) onSubscribe(conn *websocket.Conn, symbols []string) error {
 			return err
 		}
 	}
-	n.logger.Info("Subscribed", "count", len(symbols))
 	return nil
 }
 

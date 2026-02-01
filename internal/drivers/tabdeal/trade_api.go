@@ -38,7 +38,7 @@ func (t *TabdealAPI) Name() string { return "tabdeal" }
 
 func (t *TabdealAPI) Run(ctx context.Context) error {
 	t.usdtPrice = getLatestUSDTPrice()
-	t.logger.Info("Starting Tabdeal scraper", "usdtPrice", t.usdtPrice)
+	t.logger.Info("starting Tabdeal scraper", "usdtPrice", t.usdtPrice)
 
 	symbols, err := fetchMarkets()
 	if err != nil {
@@ -49,7 +49,7 @@ func (t *TabdealAPI) Run(ctx context.Context) error {
 	}
 
 	t.rateLimiter = scraper.DefaultRateLimiter()
-	t.logger.Info("Rate limiter configured", "symbols", len(symbols))
+	t.logger.Info("rate limiter configured", "symbols", len(symbols))
 
 	var wg sync.WaitGroup
 	for _, sym := range symbols {
@@ -155,7 +155,8 @@ func (t *TabdealAPI) fetchTrades(ctx context.Context, symbol string) error {
 		}
 
 		if err := t.sender.SendTrade(ctx, trade); err != nil {
-			t.logger.Debug("Send error", "error", err)
+			// TODO: add metric
+			t.logger.Debug("send error", "error", err)
 		}
 	}
 	return nil
