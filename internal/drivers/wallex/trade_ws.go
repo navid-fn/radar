@@ -26,8 +26,8 @@ type WallexWS struct {
 
 func NewWallexScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *WallexWS {
 	return &WallexWS{
-		sender:    scraper.NewSender(kafkaWriter, logger),
-		logger:    logger.With("scraper", "wallex-ws"),
+		sender: scraper.NewSender(kafkaWriter, logger),
+		logger: logger.With("scraper", "wallex-ws"),
 	}
 }
 
@@ -37,7 +37,7 @@ func (w *WallexWS) Run(ctx context.Context) error {
 	w.usdtPrice = getLatestUSDTPrice()
 	w.logger.Info("Starting Wallex WebSocket scraper", "usdtPrice", w.usdtPrice)
 
-	markets, err := fetchMarkets(w.logger)
+	markets, err := fetchMarkets()
 	if err != nil {
 		return err
 	}

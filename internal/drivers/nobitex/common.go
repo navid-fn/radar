@@ -2,7 +2,6 @@ package nobitex
 
 import (
 	"encoding/json"
-	"log/slog"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,14 +15,14 @@ const (
 
 	// depthAPI fetches orderbook data
 	// Doc: https://apidocs.nobitex.ir/#54977c5fca
-	depthAPI       = "v2/depth/"
-	marketAPI      = "market/stats"
-	usdtPriceAPI   = "orderbook/USDTIRT"
-	latestTradeAPI = "v2/trades/"
+	depthAPI       = baseUrl + "v2/depth/%s"
+	marketAPI      = baseUrl + "market/stats"
+	usdtPriceAPI   = baseUrl + "orderbook/USDTIRT"
+	latestTradeAPI = baseUrl + "v2/trades/%s"
 
 	// ohlcAPI fetches OHLC data. Params: symbol, from (unix), to (unix)
 	// Doc: https://apidocs.nobitex.ir/#6ae2dae4a2
-	ohlcAPI = "market/udf/history?symbol=%s&resolution=D&from=%d&to=%d"
+	ohlcAPI = baseUrl + "market/udf/history?symbol=%s&resolution=D&from=%d&to=%d"
 
 	// wsURl is for fetching data from websocket
 	// maxSymbolsPerConn is for maximum subscription per one websocket
@@ -65,8 +64,8 @@ type depthResponse struct {
 }
 
 // fetch tradeable markets to scrape
-func fetchMarkets(logger *slog.Logger) ([]string, error) {
-	resp, err := scraper.HTTPClient.Get(baseUrl + marketAPI)
+func fetchMarkets() ([]string, error) {
+	resp, err := scraper.HTTPClient.Get(marketAPI)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +83,6 @@ func fetchMarkets(logger *slog.Logger) ([]string, error) {
 		}
 	}
 	sort.Strings(symbols)
-	logger.Info("Fetched markets", "count", len(symbols))
 	return symbols, nil
 }
 

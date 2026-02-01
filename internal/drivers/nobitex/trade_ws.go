@@ -27,8 +27,8 @@ type NobitexWS struct {
 
 func NewNobitexScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *NobitexWS {
 	return &NobitexWS{
-		sender:    scraper.NewSender(kafkaWriter, logger),
-		logger:    logger.With("scraper", "nobitex-ws"),
+		sender: scraper.NewSender(kafkaWriter, logger),
+		logger: logger.With("scraper", "nobitex-ws"),
 	}
 }
 
@@ -38,7 +38,7 @@ func (n *NobitexWS) Run(ctx context.Context) error {
 	n.usdtPrice = getLatestUSDTPrice()
 	n.logger.Info("Starting Nobitex WebSocket scraper", "usdtPrice", n.usdtPrice)
 
-	markets, err := fetchMarkets(n.logger)
+	markets, err := fetchMarkets()
 	if err != nil {
 		return fmt.Errorf("fetch markets: %w", err)
 	}

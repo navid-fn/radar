@@ -133,7 +133,7 @@ func (w *WallexOHLC) Run(ctx context.Context) error {
 
 // fetchAllSymbols fetches OHLC data for all available symbols.
 func (w *WallexOHLC) fetchAllSymbols(ctx context.Context) error {
-	symbols, err := fetchMarkets(w.logger)
+	symbols, err := fetchMarkets()
 	if err != nil {
 		return err
 	}
@@ -172,7 +172,7 @@ func (w *WallexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 	fromTimestamp := scraper.ToMidnight(time.Now().AddDate(0, 0, -30)).Unix()
 	toTimestamp := scraper.ToMidnight(time.Now()).AddDate(0, 0, -1).Unix()
 
-	url := fmt.Sprintf(baseURL+ohlcAPI, symbol, fromTimestamp, toTimestamp)
+	url := fmt.Sprintf(ohlcAPI, symbol, fromTimestamp, toTimestamp)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err

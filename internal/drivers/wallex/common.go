@@ -3,7 +3,6 @@ package wallex
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
@@ -16,15 +15,14 @@ const (
 	baseURL = "https://api.wallex.ir/"
 
 	// api urls for scraps
-	marketsAPI = "hector/web/v1/markets"
-	ohlcAPI    = "v1/udf/history?symbol=%s&resolution=D&from=%d&to=%d"
-	tradesAPI  = "v1/trades"
+	marketsAPI = baseURL + "hector/web/v1/markets"
+	ohlcAPI    = baseURL + "v1/udf/history?symbol=%s&resolution=D&from=%d&to=%d"
+	tradesAPI  = baseURL + "v1/trades?symbol=%s"
 
 	// ws url and confs for scrap
 	wsURL                  = "wss://api.wallex.ir/ws"
 	maxSymbolsPerConn      = 50
 	maxSymbolsPerConnDepth = 25
-
 )
 
 type market struct {
@@ -59,7 +57,7 @@ type tradeAPIResponse struct {
 	Code    int            `json:"code"`
 }
 
-func fetchMarkets(logger *slog.Logger) ([]string, error) {
+func fetchMarkets() ([]string, error) {
 	resp, err := scraper.HTTPClient.Get(baseURL + marketsAPI)
 	if err != nil {
 		return nil, err
@@ -80,12 +78,11 @@ func fetchMarkets(logger *slog.Logger) ([]string, error) {
 		markets = append(markets, m.Symbol)
 	}
 	sort.Strings(markets)
-	logger.Info("Fetched markets", "count", len(markets))
 	return markets, nil
 }
 
 func getLatestUSDTPrice() float64 {
-	resp, err := scraper.HTTPClient.Get(baseURL + marketsAPI)
+	resp, err := scraper.HTTPClient.Get(marketsAPI)
 	if err != nil {
 		return 0
 	}

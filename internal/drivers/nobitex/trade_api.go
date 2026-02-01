@@ -27,8 +27,8 @@ type NobitexAPI struct {
 
 func NewNobitexAPIScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *NobitexAPI {
 	return &NobitexAPI{
-		sender:    scraper.NewSender(kafkaWriter, logger),
-		logger:    logger.With("scraper", "nobitex-api"),
+		sender: scraper.NewSender(kafkaWriter, logger),
+		logger: logger.With("scraper", "nobitex-api"),
 	}
 }
 
@@ -38,7 +38,7 @@ func (n *NobitexAPI) Run(ctx context.Context) error {
 	n.usdtPrice = getLatestUSDTPrice()
 	n.logger.Info("Starting Nobitex API scraper")
 
-	symbols, err := fetchMarkets(n.logger)
+	symbols, err := fetchMarkets()
 	if err != nil {
 		return err
 	}
@@ -81,7 +81,7 @@ func (n *NobitexAPI) pollSymbol(ctx context.Context, symbol string) {
 }
 
 func (n *NobitexAPI) fetchTrades(ctx context.Context, symbol string) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", baseUrl+latestTradeAPI+symbol, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf(latestTradeAPI, symbol), nil)
 	if err != nil {
 		return err
 	}

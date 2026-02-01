@@ -105,7 +105,7 @@ func (n *NobitexOHLC) Run(ctx context.Context) error {
 
 // fetchAllSymbols fetches OHLC data for all available symbols.
 func (n *NobitexOHLC) fetchAllSymbols(ctx context.Context) error {
-	symbols, err := fetchMarkets(n.logger)
+	symbols, err := fetchMarkets()
 	if err != nil {
 		return err
 	}
@@ -114,7 +114,8 @@ func (n *NobitexOHLC) fetchAllSymbols(ctx context.Context) error {
 	}
 
 	n.rateLimiter = scraper.DefaultRateLimiter()
-	n.logger.Info("Fetching OHLC for symbols", "count", len(symbols))
+	// TODO: add some metric later to check how many symbol we are scraping throw time
+	// metricData := len(symbols))
 
 	for _, symbol := range symbols {
 		select {
@@ -144,7 +145,7 @@ func (n *NobitexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 	fromTimestamp := scraper.ToMidnight(time.Now().AddDate(0, 0, -30)).Unix()
 	toTimestamp := scraper.ToMidnight(time.Now()).AddDate(0, 0, -1).Unix()
 
-	url := fmt.Sprintf(baseUrl+ohlcAPI, symbol, fromTimestamp, toTimestamp)
+	url := fmt.Sprintf(ohlcAPI, symbol, fromTimestamp, toTimestamp)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err

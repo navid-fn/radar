@@ -27,8 +27,8 @@ type WallexAPI struct {
 
 func NewWallexAPIScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *WallexAPI {
 	return &WallexAPI{
-		sender:    scraper.NewSender(kafkaWriter, logger),
-		logger:    logger.With("scraper", "wallex-api"),
+		sender: scraper.NewSender(kafkaWriter, logger),
+		logger: logger.With("scraper", "wallex-api"),
 	}
 }
 
@@ -38,7 +38,7 @@ func (w *WallexAPI) Run(ctx context.Context) error {
 	w.usdtPrice = getLatestUSDTPrice()
 	w.logger.Info("Starting Wallex API scraper")
 
-	symbols, err := fetchMarkets(w.logger)
+	symbols, err := fetchMarkets()
 	if err != nil {
 		return err
 	}
@@ -81,7 +81,7 @@ func (w *WallexAPI) pollSymbol(ctx context.Context, symbol string) {
 }
 
 func (w *WallexAPI) fetchTrades(ctx context.Context, symbol string) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+tradesAPI+"?symbol="+symbol, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf(tradesAPI, symbol), nil)
 	if err != nil {
 		return err
 	}

@@ -1,3 +1,4 @@
+// NOTE: we are not using this module for now, but we may use it later
 //	{
 //	  "asks": [
 //	    ["35077909990", "0.009433"],
@@ -53,7 +54,7 @@ func (n *NobitexDepthAPI) Name() string { return "nobitex-depth-api" }
 func (n *NobitexDepthAPI) Run(ctx context.Context) error {
 	n.logger.Info("starting nobitex depth API scraper")
 
-	symbols, err := fetchMarkets(n.logger)
+	symbols, err := fetchMarkets()
 	if err != nil {
 		return err
 	}
@@ -96,7 +97,7 @@ func (n *NobitexDepthAPI) pollSymbol(ctx context.Context, symbol string) {
 }
 
 func (n *NobitexDepthAPI) fetchDepths(ctx context.Context, symbol string) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", baseUrl+depthAPI+symbol, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf(depthAPI, symbol), nil)
 	if err != nil {
 		return err
 	}
