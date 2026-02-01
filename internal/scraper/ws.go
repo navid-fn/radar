@@ -109,10 +109,13 @@ func (c *WSClient) Run(ctx context.Context, symbols []string) error {
 			return nil // Graceful shutdown
 		}
 
-		c.logger.Warn("WebSocket disconnected, reconnecting",
-			"error", err,
-			"delay", reconnectDelay,
-		)
+		// TODO: handle this warnings, we see a lot of this in running
+		// we can use some metrics for it too, or pass the symbols that we
+		// subscribe in whis ws channel to check later
+		// c.logger.Warn("WebSocket disconnected, reconnecting",
+		// 	"error", err,
+		// 	"delay", reconnectDelay,
+		// )
 
 		select {
 		case <-ctx.Done():
@@ -138,7 +141,9 @@ func (c *WSClient) connect(ctx context.Context, symbols []string) error {
 	}
 	defer conn.Close()
 
-	c.logger.Info("WebSocket connected", "url", c.config.URL)
+	// TODO: for ws that constantly disconnect and connect, we see this message
+	// a lot and its make our logs dirty. Think about how to solve it later
+	// c.logger.Info("WebSocket connected", "url", c.config.URL)
 
 	conn.SetPongHandler(func(string) error { return nil })
 
@@ -200,6 +205,7 @@ func (c *WSClient) readLoop(ctx context.Context, conn *websocket.Conn) error {
 			return nil
 
 		case err := <-readErr:
+			// TODO: add metrics?
 			return fmt.Errorf("read error: %w", err)
 
 		case msg := <-messages:
@@ -215,6 +221,7 @@ func (c *WSClient) readLoop(ctx context.Context, conn *websocket.Conn) error {
 
 			if data != nil {
 				if err := c.sender.Send(ctx, data); err != nil {
+					// TODO: add metrics?
 					c.logger.Error("Kafka send failed", "error", err)
 				}
 			}
@@ -225,6 +232,7 @@ func (c *WSClient) readLoop(ctx context.Context, conn *websocket.Conn) error {
 			err := conn.WriteMessage(websocket.PingMessage, nil)
 			c.mu.Unlock()
 			if err != nil {
+				// TODO: add metrics?
 				return fmt.Errorf("ping failed: %w", err)
 			}
 		}

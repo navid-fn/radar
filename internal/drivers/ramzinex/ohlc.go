@@ -154,7 +154,7 @@ func (r *RamzinexOHLC) Run(ctx context.Context) error {
 
 // fetchAllSymbols fetches OHLC data for all available symbols.
 func (r *RamzinexOHLC) fetchAllSymbols(ctx context.Context) error {
-	symbols, _, err := fetchPairs(r.logger)
+	symbols, _, err := fetchPairs()
 	if err != nil {
 		return err
 	}

@@ -42,7 +42,7 @@ func (r *RamzinexAPI) Run(ctx context.Context) error {
 	r.usdtPrice = float64(getLatestUSDTPrice())
 	r.logger.Info("Starting Ramzinex API scraper")
 
-	pairs, pairMap, err := fetchPairs(r.logger)
+	pairs, pairMap, err := fetchPairs()
 	if err != nil {
 		return err
 	}

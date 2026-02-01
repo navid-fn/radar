@@ -190,7 +190,7 @@ func (r *RamzinexWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, er
 }
 
 func (r *RamzinexWS) fetchPairs() ([]pairDetail, error) {
-	pairs, pairMap, err := fetchPairs(r.logger)
+	pairs, pairMap, err := fetchPairs()
 	if err != nil {
 		return nil, err
 	}
