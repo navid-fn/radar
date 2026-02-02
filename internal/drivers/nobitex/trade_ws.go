@@ -131,9 +131,10 @@ func (n *NobitexWS) parseLine(conn *websocket.Conn, line []byte) *pb.TradeData {
 	}
 
 	channel, _ := push["channel"].(string)
+	// TODO: fix this part
 	symbol := ""
-	if len(channel) > 17 {
-		symbol = channel[17:]
+	if len(channel) > 14 {
+		symbol = channel[14:]
 	}
 
 	return n.createTrade(data, symbol)

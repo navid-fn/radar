@@ -47,7 +47,6 @@ func (n *NobitexAPI) Run(ctx context.Context) error {
 	}
 
 	n.rateLimiter = scraper.DefaultRateLimiter()
-	n.logger.Info("Rate limiter configured", "symbols", len(symbols))
 
 	var wg sync.WaitGroup
 	for _, sym := range symbols {

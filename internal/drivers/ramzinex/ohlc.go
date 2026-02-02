@@ -190,7 +190,7 @@ func (r *RamzinexOHLC) fetchAllSymbols(ctx context.Context) error {
 // create url with encoded params
 func (r *RamzinexOHLC) createURL(symbol string) string {
 	// Fetch last 30 days of daily OHLC
-	fromTimestamp := scraper.ToMidnight(time.Now().AddDate(0, 0, -30)).Unix()
+	fromTimestamp := scraper.ToMidnight(time.Now().AddDate(0, 0, -2)).Unix()
 	toTimestamp := scraper.ToMidnight(time.Now()).AddDate(0, 0, -1).Unix()
 
 	params := url.Values{}
@@ -221,7 +221,6 @@ func (r *RamzinexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Println(url)
 		return fmt.Errorf("status %d", resp.StatusCode)
 	}
 
@@ -247,6 +246,17 @@ func (r *RamzinexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 
 	cleanedSymbol := scraper.NormalizeSymbol("ramzinex", symbol)
 
+	if cleanedSymbol == "XAUT (MILI GRAM)/IRT" {
+		// MarshalIndent makes it human-readable with 2 spaces indentation
+		fmt.Println(url)
+		b, err := json.MarshalIndent(data, "", "  ")
+		if err == nil {
+			fmt.Println(string(b))
+		} else {
+			fmt.Printf("Error marshaling OHLC: %v\n", err)
+		}
+	}
+
 	// Update USDT price if this is USDT/IRT
 	if cleanedSymbol == "USDT/IRT" && length > 0 {
 		r.usdtMu.Lock()
@@ -271,7 +281,6 @@ func (r *RamzinexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 			UsdtPrice: r.usdtPrice,
 			OpenTime:  openTime,
 		}
-
 		if err := r.sender.SendOHLC(ctx, ohlc); err != nil {
 			// TODO: add metric
 			r.logger.Debug("send error", "error", err)

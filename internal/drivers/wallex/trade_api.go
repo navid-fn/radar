@@ -47,7 +47,6 @@ func (w *WallexAPI) Run(ctx context.Context) error {
 	}
 
 	w.rateLimiter = scraper.DefaultRateLimiter()
-	w.logger.Info("rate limiter configured", "symbols", len(symbols))
 
 	var wg sync.WaitGroup
 	for _, sym := range symbols {

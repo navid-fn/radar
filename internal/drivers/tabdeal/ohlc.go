@@ -139,7 +139,7 @@ func (r *TabdealOHLC) fetchAllSymbols(ctx context.Context) error {
 func (r *TabdealOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 	// Fetch last 30 days of daily OHLC
 	fromTimestamp := scraper.ToMidnight(time.Now().AddDate(0, 0, -30)).Unix()
-	toTimestamp := scraper.ToMidnight(time.Now()).AddDate(0, 0, -1).Unix()
+	toTimestamp := scraper.ToMidnight(time.Now()).AddDate(0, 0, -2).Unix()
 	symbolUrl := strings.Replace(scraper.NormalizeSymbol("tabdeal", symbol), "/", "_", 1)
 	url := fmt.Sprintf(ohlcURL, symbolUrl, fromTimestamp, toTimestamp)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -186,7 +186,6 @@ func (r *TabdealOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 		candles = append(candles, ohlc)
 	}
 	// Convert each candle to proto and send
-
 	if err := r.sender.SendOHLCBatch(ctx, candles); err != nil {
 		// TODO: add metric
 		r.logger.Debug("send error", "error", err)

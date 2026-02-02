@@ -16,15 +16,13 @@ import (
 	"nobitex/radar/internal/scraper"
 
 	"github.com/segmentio/kafka-go"
-	"golang.org/x/time/rate"
 )
 
 type TabdealAPI struct {
-	sender      *scraper.Sender
-	logger      *slog.Logger
-	rateLimiter *rate.Limiter
-	usdtPrice   float64
-	usdtMu      sync.RWMutex
+	sender    *scraper.Sender
+	logger    *slog.Logger
+	usdtPrice float64
+	usdtMu    sync.RWMutex
 }
 
 func NewTabdealScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *TabdealAPI {
@@ -48,9 +46,6 @@ func (t *TabdealAPI) Run(ctx context.Context) error {
 		return fmt.Errorf("no symbols found")
 	}
 
-	t.rateLimiter = scraper.DefaultRateLimiter()
-	t.logger.Info("rate limiter configured", "symbols", len(symbols))
-
 	var wg sync.WaitGroup
 	for _, sym := range symbols {
 		wg.Add(1)
@@ -73,16 +68,12 @@ func (t *TabdealAPI) pollSymbol(ctx context.Context, symbol string) {
 		default:
 		}
 
-		if err := t.rateLimiter.Wait(ctx); err != nil {
-			return
-		}
-
 		err := t.fetchTrades(ctx, symbol)
 		if err != nil {
 			consecErrors++
-			backoff := 5 * time.Second
+			backoff := 1 * time.Second
 			if consecErrors >= 5 {
-				backoff = 60 * time.Second
+				backoff = 2 * time.Second
 			}
 			select {
 			case <-ctx.Done():
