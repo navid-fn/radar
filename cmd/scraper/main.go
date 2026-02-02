@@ -91,6 +91,8 @@ func main() {
 	depthScrapers := []scraper.Scraper{
 		nobitex.NewNobitexDepthScraper(depthWriter, logger),
 		wallex.NewWallexDepthScraper(depthWriter, logger),
+		bitpin.NewBitpinWsDepthScraper(depthWriter, logger),
+		ramzinex.NewRamzinexDepthScraper(depthWriter, logger),
 	}
 
 	scrapers := append(tradeScrapers, ohlcScrapers...)
