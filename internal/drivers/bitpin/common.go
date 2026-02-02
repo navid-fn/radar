@@ -11,9 +11,18 @@ import (
 )
 
 const (
-	marketsAPI = "https://api.bitpin.ir/api/v1/mkt/markets/"
-	tickersAPI = "https://api.bitpin.ir/api/v1/mkt/tickers/"
-	ohlcAPI    = "https://api.bitpin.ir/v1/mkt/tv/get_bars/?symbol=%s&from=%d&to=%d&res=1D"
+	// URL for apis
+	baseURL    = "https://api.bitpin.ir"
+	marketsAPI = baseURL + "/api/v1/mkt/markets/"
+	tickersAPI = baseURL + "/api/v1/mkt/tickers/"
+	tradesAPI  = baseURL + "/api/v1/mth/matches/%s/"
+
+	// OHLC wasnt in the doc
+	ohlcAPI = baseURL + "/v1/mkt/tv/get_bars/?symbol=%s&from=%d&to=%d&res=1D"
+
+	// URL for ws
+	wsURL             = "wss://centrifugo.bitpin.ir/connection/websocket"
+	maxSymbolsPerConn = 100
 )
 
 type market struct {
@@ -33,6 +42,14 @@ type tradeMatch struct {
 	QuoteAmount string  `json:"quote_amount"`
 	Side        string  `json:"side"`
 	Time        float64 `json:"time"`
+	Symbol      string  `json:"symbol"`
+}
+
+type depthResponse struct {
+	EventTime string     `json:"event_time"`
+	Bids      [][]string `json:"bids"`
+	Asks      [][]string `json:"asks"`
+	Symbol    string     `json:"symbol"`
 }
 
 func fetchMarkets(logger *slog.Logger) ([]string, error) {

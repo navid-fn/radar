@@ -93,7 +93,7 @@ func (n *NobitexDepthWS) Name() string { return "nobitex-depth" }
 //
 // The method blocks until the context is cancelled.
 func (n *NobitexDepthWS) Run(ctx context.Context) error {
-	n.logger.Info("Starting Nobitex depth WebSocket scraper",
+	n.logger.Info("starting Nobitex depth WebSocket scraper",
 		"snapshot_interval", snapshotInterval)
 
 	// Fetch available markets
@@ -104,8 +104,6 @@ func (n *NobitexDepthWS) Run(ctx context.Context) error {
 	if len(markets) == 0 {
 		return fmt.Errorf("no markets found")
 	}
-
-	n.logger.Info("Markets loaded for depth collection", "count", len(markets))
 
 	// Chunk markets to respect connection limits
 	chunks := scraper.ChunkSlice(markets, maxSymbolsPerConn)

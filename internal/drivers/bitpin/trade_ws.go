@@ -16,11 +16,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const (
-	wsURL             = "wss://centrifugo.bitpin.ir/connection/websocket"
-	maxSymbolsPerConn = 100
-)
-
 type BitpinWS struct {
 	sender    *scraper.Sender
 	logger    *slog.Logger
@@ -106,7 +101,6 @@ func (b *BitpinWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, erro
 		return nil, nil
 	}
 
-	channel, _ := push["channel"].(string)
 	pub, _ := push["pub"].(map[string]any)
 	if pub == nil {
 		return nil, nil
@@ -120,11 +114,6 @@ func (b *BitpinWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, erro
 	event, _ := dataField["event"].(string)
 	if event != "matches_update" {
 		return nil, nil
-	}
-
-	symbol := ""
-	if len(channel) > 8 {
-		symbol = channel[8:]
 	}
 
 	matches, ok := dataField["matches"].([]tradeMatch)
@@ -147,7 +136,7 @@ func (b *BitpinWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, erro
 				volume = quoteAmount / price
 			}
 		}
-		cleanedSymbol := scraper.NormalizeSymbol("bitpin", symbol)
+		cleanedSymbol := scraper.NormalizeSymbol("bitpin", m.Symbol)
 
 		if cleanedSymbol == "USDT/IRT" {
 			b.usdtMu.Lock()

@@ -17,8 +17,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const tradesAPI = "https://api.bitpin.org/api/v1/mth/matches/%s/"
-
 type BitpinAPI struct {
 	sender      *scraper.Sender
 	logger      *slog.Logger
