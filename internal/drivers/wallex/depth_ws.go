@@ -211,9 +211,9 @@ func (w *WallexDepthWS) updateDepthStore(symbol string, levels []*pb.OrderLevel,
 	}
 
 	if isSellSide {
-		w.depthStore[symbol].bids = levels
-	} else {
 		w.depthStore[symbol].asks = levels
+	} else {
+		w.depthStore[symbol].bids = levels
 	}
 	w.depthStore[symbol].lastUpdate = time.Now().UTC()
 }

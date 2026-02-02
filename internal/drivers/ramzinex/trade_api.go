@@ -17,8 +17,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const tradesAPI = "https://publicapi.ramzinex.com/exchange/api/v1.0/exchange/orderbooks/%d/trades"
-
 type RamzinexAPI struct {
 	sender       *scraper.Sender
 	logger       *slog.Logger

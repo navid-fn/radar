@@ -8,9 +8,18 @@ import (
 )
 
 const (
-	pairsAPI     = "https://api.ramzinex.com/exchange/api/v2.0/exchange/pairs"
-	usdtPriceAPI = "https://publicapi.ramzinex.com/exchange/api/v1.0/exchange/orderbooks/11/market_sell_price"
-	ohlcURL      = "https://publicapi.ramzinex.com/exchange/api/v1.0/exchange/chart/tv/v2.0/history"
+	// pubilc api
+	baseURL      = "https://publicapi.ramzinex.com/exchange/api/v1.0/exchange"
+	usdtPriceAPI = baseURL + "/orderbooks/11/market_sell_price"
+	ohlcURL      = baseURL + "/chart/tv/v2.0/history"
+	tradesAPI    = baseURL + "/orderbooks/%d/trades"
+
+	// api url
+	pairsAPI = "https://api.ramzinex.com/exchange/api/v2.0/exchange/pairs"
+
+	// ws url
+	wsURL             = "wss://websocket.ramzinex.com/websocket"
+	maxSymbolsPerConn = 100
 )
 
 type pairName struct {
@@ -39,7 +48,10 @@ type latestAPIData struct {
 	Status int   `json:"status"`
 }
 
-// ramzinex uses "2006-01-02 15:04:05" format
+type depthResponse struct {
+	Bids [][]any `json:"buys"`
+	Asks [][]any `json:"sells"`
+}
 
 func fetchPairs() ([]pairDetail, map[int]string, error) {
 	resp, err := scraper.HTTPClient.Get(pairsAPI)

@@ -17,11 +17,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const (
-	wsURL             = "wss://websocket.ramzinex.com/websocket"
-	maxSymbolsPerConn = 100
-)
-
 type RamzinexWS struct {
 	sender       *scraper.Sender
 	logger       *slog.Logger
