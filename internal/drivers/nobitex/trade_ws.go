@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"sync"
 
 	pb "nobitex/radar/internal/proto"
@@ -70,7 +71,7 @@ func (n *NobitexWS) onConnect(conn *websocket.Conn) error {
 
 func (n *NobitexWS) onSubscribe(conn *websocket.Conn, symbols []string) error {
 	for i, sym := range symbols {
-		msg := map[string]any{"id": i + 2, "subscribe": map[string]any{"channel": "public:trades-" + sym}}
+		msg := map[string]any{"id": i + 2, "subscribe": map[string]any{"channel": tradeChannelName + sym}}
 		if err := conn.WriteJSON(msg); err != nil {
 			return err
 		}
@@ -131,10 +132,11 @@ func (n *NobitexWS) parseLine(conn *websocket.Conn, line []byte) *pb.TradeData {
 	}
 
 	channel, _ := push["channel"].(string)
-	// TODO: fix this part
-	symbol := ""
-	if len(channel) > 14 {
-		symbol = channel[14:]
+	var symbol string
+	_, symbol, find := strings.Cut(channel, tradeChannelName)
+
+	if !find {
+		return nil
 	}
 
 	return n.createTrade(data, symbol)
@@ -152,6 +154,8 @@ func (n *NobitexWS) createTrade(data map[string]any, symbol string) *pb.TradeDat
 	if price <= 0 || volume <= 0 {
 		return nil
 	}
+
+	fmt.Println(symbol)
 
 	cleanedSymbol := scraper.NormalizeSymbol("nobitex", symbol)
 	cleanedPrice := scraper.NormalizePrice(cleanedSymbol, price)

@@ -37,6 +37,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -134,7 +135,7 @@ func (n *NobitexDepthWS) onConnect(conn *websocket.Conn) error {
 
 func (n *NobitexDepthWS) onSubscribe(conn *websocket.Conn, symbols []string) error {
 	for _, sym := range symbols {
-		msg := map[string]any{"id": 2, "subscribe": map[string]any{"channel": "public:orderbook-" + sym}}
+		msg := map[string]any{"id": 2, "subscribe": map[string]any{"channel": depthChannelName + sym}}
 		if err := conn.WriteJSON(msg); err != nil {
 			return err
 		}
@@ -267,9 +268,12 @@ func (n *NobitexDepthWS) parseLine(conn *websocket.Conn, line []byte) *pb.OrderB
 	json.Unmarshal(jsonBytes, &data)
 
 	channel, _ := push["channel"].(string)
-	symbol := ""
-	if len(channel) > 17 {
-		symbol = channel[17:]
+
+	var symbol string
+	_, symbol, find := strings.Cut(channel, depthChannelName)
+
+	if !find {
+		return nil
 	}
 
 	return n.createDepth(data, symbol)

@@ -15,10 +15,11 @@ const (
 
 	// depthAPI fetches orderbook data
 	// Doc: https://apidocs.nobitex.ir/#54977c5fca
-	depthAPI       = baseUrl + "v2/depth/%s"
-	marketAPI      = baseUrl + "market/stats"
-	usdtPriceAPI   = baseUrl + "orderbook/USDTIRT"
-	latestTradeAPI = baseUrl + "v2/trades/%s"
+	depthAPI         = baseUrl + "v2/depth/%s"
+	marketAPI        = baseUrl + "market/stats"
+	usdtPriceAPI     = baseUrl + "orderbook/USDTIRT"
+	latestTradeAPI   = baseUrl + "v2/trades/%s"
+	depthChannelName = "public:orderbook-"
 
 	// ohlcAPI fetches OHLC data. Params: symbol, from (unix), to (unix)
 	// Doc: https://apidocs.nobitex.ir/#6ae2dae4a2
@@ -28,6 +29,7 @@ const (
 	// maxSymbolsPerConn is for maximum subscription per one websocket
 	wsURL             = "wss://ws.nobitex.ir/connection/websocket"
 	maxSymbolsPerConn = 100
+	tradeChannelName  = "public:trades-"
 )
 
 type usdtPrice struct {
