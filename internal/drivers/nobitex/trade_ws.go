@@ -155,8 +155,6 @@ func (n *NobitexWS) createTrade(data map[string]any, symbol string) *pb.TradeDat
 		return nil
 	}
 
-	fmt.Println(symbol)
-
 	cleanedSymbol := scraper.NormalizeSymbol("nobitex", symbol)
 	cleanedPrice := scraper.NormalizePrice(cleanedSymbol, price)
 

@@ -236,7 +236,7 @@ func (b *BitpinDepthWS) parseLine(conn *websocket.Conn, message []byte) *pb.Orde
 
 	jsonBytes, err := json.Marshal(dataMap)
 	if err != nil {
-		fmt.Println(err)
+		b.logger.Debug("marshaling json", "error", err)
 		return nil
 	}
 

@@ -248,7 +248,7 @@ func (r *RamzinexDepthWS) parseLine(conn *websocket.Conn, message []byte) *pb.Or
 
 	jsonBytes, err := json.Marshal(dataMap)
 	if err != nil {
-		fmt.Println(err)
+		r.logger.Debug("marshaling json", "error", err)
 		return nil
 	}
 

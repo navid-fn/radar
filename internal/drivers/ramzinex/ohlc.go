@@ -246,17 +246,6 @@ func (r *RamzinexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 
 	cleanedSymbol := scraper.NormalizeSymbol("ramzinex", symbol)
 
-	if cleanedSymbol == "XAUT (MILI GRAM)/IRT" {
-		// MarshalIndent makes it human-readable with 2 spaces indentation
-		fmt.Println(url)
-		b, err := json.MarshalIndent(data, "", "  ")
-		if err == nil {
-			fmt.Println(string(b))
-		} else {
-			fmt.Printf("Error marshaling OHLC: %v\n", err)
-		}
-	}
-
 	// Update USDT price if this is USDT/IRT
 	if cleanedSymbol == "USDT/IRT" && length > 0 {
 		r.usdtMu.Lock()

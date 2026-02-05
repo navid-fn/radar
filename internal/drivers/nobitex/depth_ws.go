@@ -258,7 +258,7 @@ func (n *NobitexDepthWS) parseLine(conn *websocket.Conn, line []byte) *pb.OrderB
 
 	jsonBytes, err := json.Marshal(dataMap)
 	if err != nil {
-		fmt.Println(err)
+		n.logger.Debug("marshaling json", "error", err)
 		return nil
 	}
 
