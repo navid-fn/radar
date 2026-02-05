@@ -123,7 +123,7 @@ func getTimeValue(m map[string]any, key string) string {
 }
 
 func getLatestUSDTPrice() float64 {
-	resp, err := scraper.HTTPClient.Get(baseUrl + usdtPriceAPI)
+	resp, err := scraper.HTTPClient.Get(usdtPriceAPI)
 	if err != nil {
 		return 0
 	}
