@@ -13,7 +13,6 @@ import (
 	"nobitex/radar/internal/scraper"
 
 	"github.com/gorilla/websocket"
-	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -25,9 +24,9 @@ type RamzinexWS struct {
 	usdtMu       sync.RWMutex
 }
 
-func NewRamzinexScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *RamzinexWS {
+func NewRamzinexScraper(writer scraper.MessageWriter, logger *slog.Logger) *RamzinexWS {
 	return &RamzinexWS{
-		sender:       scraper.NewSender(kafkaWriter, logger),
+		sender:       scraper.NewSender(writer, logger),
 		logger:       logger.With("scraper", "ramzinex-ws"),
 		pairIDToName: make(map[int]string),
 	}

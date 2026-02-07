@@ -29,7 +29,6 @@ import (
 	"nobitex/radar/internal/proto"
 	"nobitex/radar/internal/scraper"
 
-	"github.com/segmentio/kafka-go"
 	"golang.org/x/time/rate"
 )
 
@@ -41,9 +40,9 @@ type NobitexDepthAPI struct {
 	usdtMu      sync.RWMutex
 }
 
-func NewNobitexDepthAPIScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *NobitexDepthAPI {
+func NewNobitexDepthAPIScraper(writer scraper.MessageWriter, logger *slog.Logger) *NobitexDepthAPI {
 	return &NobitexDepthAPI{
-		sender:    scraper.NewSender(kafkaWriter, logger),
+		sender:    scraper.NewSender(writer, logger),
 		logger:    logger.With("scraper", "nobitex-depth-api"),
 		usdtPrice: getLatestUSDTPrice(),
 	}

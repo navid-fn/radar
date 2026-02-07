@@ -15,7 +15,6 @@ import (
 	"nobitex/radar/internal/proto"
 	"nobitex/radar/internal/scraper"
 
-	"github.com/segmentio/kafka-go"
 )
 
 type TabdealAPI struct {
@@ -25,9 +24,9 @@ type TabdealAPI struct {
 	usdtMu    sync.RWMutex
 }
 
-func NewTabdealScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *TabdealAPI {
+func NewTabdealScraper(writer scraper.MessageWriter, logger *slog.Logger) *TabdealAPI {
 	return &TabdealAPI{
-		sender: scraper.NewSender(kafkaWriter, logger),
+		sender: scraper.NewSender(writer, logger),
 		logger: logger.With("scraper", "tabdeal"),
 	}
 }

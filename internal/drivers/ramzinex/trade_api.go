@@ -13,7 +13,6 @@ import (
 	"nobitex/radar/internal/proto"
 	"nobitex/radar/internal/scraper"
 
-	"github.com/segmentio/kafka-go"
 	"golang.org/x/time/rate"
 )
 
@@ -26,9 +25,9 @@ type RamzinexAPI struct {
 	usdtMu       sync.RWMutex
 }
 
-func NewRamzinexAPIScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *RamzinexAPI {
+func NewRamzinexAPIScraper(writer scraper.MessageWriter, logger *slog.Logger) *RamzinexAPI {
 	return &RamzinexAPI{
-		sender:       scraper.NewSender(kafkaWriter, logger),
+		sender:       scraper.NewSender(writer, logger),
 		logger:       logger.With("scraper", "ramzinex-api"),
 		pairIDToName: make(map[int]string),
 	}

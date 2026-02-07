@@ -12,7 +12,6 @@ import (
 	"nobitex/radar/internal/scraper"
 
 	"github.com/gorilla/websocket"
-	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -23,9 +22,9 @@ type BitpinWS struct {
 	usdtMu    sync.RWMutex
 }
 
-func NewBitpinScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *BitpinWS {
+func NewBitpinScraper(writer scraper.MessageWriter, logger *slog.Logger) *BitpinWS {
 	return &BitpinWS{
-		sender: scraper.NewSender(kafkaWriter, logger),
+		sender: scraper.NewSender(writer, logger),
 		logger: logger.With("scraper", "bitpin-ws"),
 	}
 }
@@ -107,22 +106,26 @@ func (b *BitpinWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, erro
 	}
 
 	dataField, _ := pub["data"].(map[string]any)
-	if dataField == nil {
-		return nil, nil
-	}
 
 	event, _ := dataField["event"].(string)
 	if event != "matches_update" {
 		return nil, nil
 	}
 
-	matches, ok := dataField["matches"].([]tradeMatch)
-	if !ok {
+	jsonBytes, err := json.Marshal(dataField["matches"])
+	if err != nil {
+		b.logger.Debug("marshaling json", "error", err)
 		return nil, nil
 	}
 
+	var matches []tradeMatch
+	json.Unmarshal(jsonBytes, &matches)
+
+	symbol := dataField["symbol"].(string)
+
 	var trades []*pb.TradeData
 	for _, m := range matches {
+		m.Symbol = symbol
 		tradeTime := scraper.FloatTimestampToRFC3339(m.Time)
 		price, _ := strconv.ParseFloat(m.Price, 64)
 		volume, _ := strconv.ParseFloat(m.BaseAmount, 64)

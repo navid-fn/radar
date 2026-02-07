@@ -33,7 +33,6 @@ import (
 	"nobitex/radar/internal/scraper"
 
 	"github.com/gorilla/websocket"
-	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -64,9 +63,9 @@ type WallexDepthWS struct {
 	lastSnapshotTime time.Time
 }
 
-func NewWallexDepthScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *WallexDepthWS {
+func NewWallexDepthScraper(writer scraper.MessageWriter, logger *slog.Logger) *WallexDepthWS {
 	return &WallexDepthWS{
-		sender:             scraper.NewSender(kafkaWriter, logger),
+		sender:             scraper.NewSender(writer, logger),
 		logger:             logger.With("scraper", "wallex-depth-ws"),
 		depthStore: make(map[string]*symbolDepth),
 	}

@@ -30,7 +30,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/segmentio/kafka-go"
 	"golang.org/x/time/rate"
 )
 
@@ -55,9 +54,9 @@ type BitpinOHLC struct {
 }
 
 // NewBitpinOHLCScraper creates a new Nobitex OHLC scraper.
-func NewBitpinOHLCScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *BitpinOHLC {
+func NewBitpinOHLCScraper(writer scraper.MessageWriter, logger *slog.Logger) *BitpinOHLC {
 	return &BitpinOHLC{
-		sender: scraper.NewSender(kafkaWriter, logger),
+		sender: scraper.NewSender(writer, logger),
 		logger: logger.With("scraper", "bipin-ohlc"),
 	}
 }

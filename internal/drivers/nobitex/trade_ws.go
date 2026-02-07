@@ -15,7 +15,6 @@ import (
 	"nobitex/radar/internal/scraper"
 
 	"github.com/gorilla/websocket"
-	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -26,9 +25,9 @@ type NobitexWS struct {
 	usdtMu    sync.RWMutex
 }
 
-func NewNobitexScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *NobitexWS {
+func NewNobitexScraper(writer scraper.MessageWriter, logger *slog.Logger) *NobitexWS {
 	return &NobitexWS{
-		sender: scraper.NewSender(kafkaWriter, logger),
+		sender: scraper.NewSender(writer, logger),
 		logger: logger.With("scraper", "nobitex-ws"),
 	}
 }

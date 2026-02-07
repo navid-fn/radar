@@ -27,7 +27,6 @@ import (
 	"nobitex/radar/internal/proto"
 	"nobitex/radar/internal/scraper"
 
-	"github.com/segmentio/kafka-go"
 	"golang.org/x/time/rate"
 )
 
@@ -55,9 +54,9 @@ type NobitexOHLC struct {
 }
 
 // NewNobitexOHLCScraper creates a new Nobitex OHLC scraper.
-func NewNobitexOHLCScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *NobitexOHLC {
+func NewNobitexOHLCScraper(writer scraper.MessageWriter, logger *slog.Logger) *NobitexOHLC {
 	return &NobitexOHLC{
-		sender: scraper.NewSender(kafkaWriter, logger),
+		sender: scraper.NewSender(writer, logger),
 		logger: logger.With("scraper", "nobitex-ohlc"),
 	}
 }

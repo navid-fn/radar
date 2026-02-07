@@ -14,7 +14,6 @@ import (
 	"nobitex/radar/internal/proto"
 	"nobitex/radar/internal/scraper"
 
-	"github.com/segmentio/kafka-go"
 )
 
 const (
@@ -52,9 +51,9 @@ type ConvertedData struct {
 	USD float64 `json:"usd"`
 }
 
-func NewCoinGeckoScraper(kafkaWriter *kafka.Writer, logger *slog.Logger, cfg *configs.CoingeckoConfigs) *CoinGeckoScraper {
+func NewCoinGeckoScraper(writer scraper.MessageWriter, logger *slog.Logger, cfg *configs.CoingeckoConfigs) *CoinGeckoScraper {
 	return &CoinGeckoScraper{
-		sender:       scraper.NewSender(kafkaWriter, logger),
+		sender:       scraper.NewSender(writer, logger),
 		logger:       logger.With("scraper", "coingecko"),
 		httpClient:   &http.Client{Timeout: requestTimeout},
 		exchanges:    cfg.ExchangesID,

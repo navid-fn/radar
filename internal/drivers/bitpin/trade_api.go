@@ -13,7 +13,6 @@ import (
 	"nobitex/radar/internal/proto"
 	"nobitex/radar/internal/scraper"
 
-	"github.com/segmentio/kafka-go"
 	"golang.org/x/time/rate"
 )
 
@@ -25,9 +24,9 @@ type BitpinAPI struct {
 	usdtMu      sync.RWMutex
 }
 
-func NewBitpinAPIScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *BitpinAPI {
+func NewBitpinAPIScraper(writer scraper.MessageWriter, logger *slog.Logger) *BitpinAPI {
 	return &BitpinAPI{
-		sender: scraper.NewSender(kafkaWriter, logger),
+		sender: scraper.NewSender(writer, logger),
 		logger: logger.With("scraper", "bitpin-api"),
 	}
 }

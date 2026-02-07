@@ -39,7 +39,6 @@ import (
 	"nobitex/radar/internal/scraper"
 
 	"github.com/gorilla/websocket"
-	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -58,9 +57,9 @@ type BitpinDepthWS struct {
 	lastSnapshotTime time.Time
 }
 
-func NewBitpinWsDepthScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *BitpinDepthWS {
+func NewBitpinWsDepthScraper(writer scraper.MessageWriter, logger *slog.Logger) *BitpinDepthWS {
 	return &BitpinDepthWS{
-		sender:     scraper.NewSender(kafkaWriter, logger),
+		sender:     scraper.NewSender(writer, logger),
 		logger:     logger.With("scraper", "bitpin-ws-depth"),
 		depthStore: make(map[string]*pb.OrderBookSnapshot),
 	}

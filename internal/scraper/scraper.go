@@ -36,15 +36,21 @@ type Scraper interface {
 	Name() string
 }
 
-// Sender handles serializing and sending trade data to Kafka.
-// It wraps a kafka.Writer with protobuf serialization.
+// MessageWriter is the interface for writing messages to a backend (Kafka, debug, etc.).
+// *kafka.Writer satisfies this interface.
+type MessageWriter interface {
+	WriteMessages(ctx context.Context, msgs ...kafka.Message) error
+}
+
+// Sender handles serializing and sending trade data to a message backend.
+// It wraps a MessageWriter with protobuf serialization.
 type Sender struct {
-	writer *kafka.Writer
+	writer MessageWriter
 	logger *slog.Logger
 }
 
-// NewSender creates a new Kafka sender with the given writer and logger.
-func NewSender(writer *kafka.Writer, logger *slog.Logger) *Sender {
+// NewSender creates a new sender with the given writer and logger.
+func NewSender(writer MessageWriter, logger *slog.Logger) *Sender {
 	return &Sender{writer: writer, logger: logger}
 }
 

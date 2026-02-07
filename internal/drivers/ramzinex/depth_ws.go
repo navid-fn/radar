@@ -30,13 +30,12 @@ import (
 	"nobitex/radar/internal/scraper"
 
 	"github.com/gorilla/websocket"
-	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
 )
 
 // snapshotInterval defines how often to send snapshots
 // TODO: we can use config for reading/changing this interval later
-const snapshotInterval = 5 * time.Minute
+const snapshotInterval = 1 * time.Minute
 
 type RamzinexDepthWS struct {
 	sender       *scraper.Sender
@@ -53,9 +52,9 @@ type RamzinexDepthWS struct {
 	lastSnapshotTime time.Time
 }
 
-func NewRamzinexDepthScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *RamzinexDepthWS {
+func NewRamzinexDepthScraper(writer scraper.MessageWriter, logger *slog.Logger) *RamzinexDepthWS {
 	return &RamzinexDepthWS{
-		sender:       scraper.NewSender(kafkaWriter, logger),
+		sender:       scraper.NewSender(writer, logger),
 		logger:       logger.With("scraper", "ramzinex-depth-ws"),
 		pairIDToName: make(map[int]string),
 

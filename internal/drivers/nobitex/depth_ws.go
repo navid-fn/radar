@@ -45,7 +45,6 @@ import (
 	"nobitex/radar/internal/scraper"
 
 	"github.com/gorilla/websocket"
-	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -69,9 +68,9 @@ type NobitexDepthWS struct {
 	lastSnapshotTime time.Time
 }
 
-func NewNobitexDepthScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *NobitexDepthWS {
+func NewNobitexDepthScraper(writer scraper.MessageWriter, logger *slog.Logger) *NobitexDepthWS {
 	return &NobitexDepthWS{
-		sender:     scraper.NewSender(kafkaWriter, logger),
+		sender:     scraper.NewSender(writer, logger),
 		logger:     logger.With("scraper", "nobitex-depth-ws"),
 		depthStore: make(map[string]*pb.OrderBookSnapshot),
 	}

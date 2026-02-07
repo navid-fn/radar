@@ -77,7 +77,6 @@ import (
 	"nobitex/radar/internal/proto"
 	"nobitex/radar/internal/scraper"
 
-	"github.com/segmentio/kafka-go"
 	"golang.org/x/time/rate"
 )
 
@@ -105,9 +104,9 @@ type RamzinexOHLC struct {
 }
 
 // NewRamzinexOHLCScraper creates a new Ramzinex OHLC scraper.
-func NewRamzinexOHLCScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *RamzinexOHLC {
+func NewRamzinexOHLCScraper(writer scraper.MessageWriter, logger *slog.Logger) *RamzinexOHLC {
 	return &RamzinexOHLC{
-		sender:         scraper.NewSender(kafkaWriter, logger),
+		sender:         scraper.NewSender(writer, logger),
 		logger:         logger.With("scraper", "ramzinex-ohlc"),
 		symbolIDToName: make(map[int]string),
 	}

@@ -28,7 +28,6 @@ import (
 	"nobitex/radar/internal/proto"
 	"nobitex/radar/internal/scraper"
 
-	"github.com/segmentio/kafka-go"
 	"golang.org/x/time/rate"
 )
 
@@ -56,9 +55,9 @@ type TabdealOHLC struct {
 }
 
 // NewTabdealOHLCScraper creates a new tabdeal OHLC scraper.
-func NewTabdealOHLCScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *TabdealOHLC {
+func NewTabdealOHLCScraper(writer scraper.MessageWriter, logger *slog.Logger) *TabdealOHLC {
 	return &TabdealOHLC{
-		sender: scraper.NewSender(kafkaWriter, logger),
+		sender: scraper.NewSender(writer, logger),
 		logger: logger.With("scraper", "tabdeal-ohlc"),
 	}
 }

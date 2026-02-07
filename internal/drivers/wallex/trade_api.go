@@ -13,7 +13,6 @@ import (
 	"nobitex/radar/internal/proto"
 	"nobitex/radar/internal/scraper"
 
-	"github.com/segmentio/kafka-go"
 	"golang.org/x/time/rate"
 )
 
@@ -25,9 +24,9 @@ type WallexAPI struct {
 	usdtMu      sync.RWMutex
 }
 
-func NewWallexAPIScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *WallexAPI {
+func NewWallexAPIScraper(writer scraper.MessageWriter, logger *slog.Logger) *WallexAPI {
 	return &WallexAPI{
-		sender: scraper.NewSender(kafkaWriter, logger),
+		sender: scraper.NewSender(writer, logger),
 		logger: logger.With("scraper", "wallex-api"),
 	}
 }
