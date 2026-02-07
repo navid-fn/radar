@@ -20,13 +20,13 @@
 // # Collection Strategy
 //
 // The scraper maintains a continuous WebSocket connection but only sends
-// orderbook snapshots to Kafka at 1-minute intervals (e.g., 12:00, 12:01, 12:02).
+// orderbook snapshots to Kafka at 5-minute intervals (e.g., 12:00, 12:05, 12:10).
 //
 // How it works:
 //   - Stays connected to WebSocket continuously
 //   - Receives and stores the latest depth data for each symbol
-//   - At each minute mark, sends the current state as a snapshot
-//   - Ignores intermediate updates between minute marks
+//   - At each 5-minute mark, sends the current state as a snapshot
+//   - Ignores intermediate updates between interval marks
 package nobitex
 
 import (
@@ -49,9 +49,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// snapshotInterval defines how often to send snapshots (every 1 minute)
+// snapshotInterval defines how often to send snapshots
 // TODO: we can use config for reading/changing this interval later
-const snapshotInterval = 1 * time.Minute
+const snapshotInterval = 5 * time.Minute
 
 // NobitexDepthWS handles WebSocket-based depth data collection from Nobitex.
 // It maintains a continuous connection but only sends snapshots every minute.
@@ -64,9 +64,9 @@ type NobitexDepthWS struct {
 	depthStore map[string]*pb.OrderBookSnapshot
 	mu         sync.RWMutex
 
-	// lastSnapshotMinute tracks the last minute we sent snapshots
-	// to ensure we only send once per minute
-	lastSnapshotMinute int
+	// lastSnapshotTime tracks the last interval we sent snapshots
+	// to ensure we only send once per snapshotInterval
+	lastSnapshotTime time.Time
 }
 
 func NewNobitexDepthScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *NobitexDepthWS {
@@ -74,22 +74,18 @@ func NewNobitexDepthScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *Nob
 		sender:     scraper.NewSender(kafkaWriter, logger),
 		logger:     logger.With("scraper", "nobitex-depth-ws"),
 		depthStore: make(map[string]*pb.OrderBookSnapshot),
-
-		// when DepthWs start, we dont check minute, we store snapshot then store minute
-		// then update it for get next snapshot for next minute
-		lastSnapshotMinute: -1,
 	}
 }
 
 // Name returns the scraper identifier used for logging and metrics.
 func (n *NobitexDepthWS) Name() string { return "nobitex-depth" }
 
-// Run starts the depth data collection with 1-minute snapshots.
+// Run starts the depth data collection with 5-minute snapshots.
 //
 // The scraper:
 //  1. Connects to WebSocket and stays connected
 //  2. Continuously receives and stores depth updates
-//  3. Sends snapshots to Kafka only at minute boundaries (12:00, 12:01, etc.)
+//  3. Sends snapshots to Kafka only at 5-minute boundaries (12:00, 12:05, etc.)
 //
 // The method blocks until the context is cancelled.
 func (n *NobitexDepthWS) Run(ctx context.Context) error {
@@ -155,18 +151,18 @@ func (n *NobitexDepthWS) onMessage(conn *websocket.Conn, message []byte) ([]byte
 		}
 	}
 
-	// Check if we should send snapshots (at minute boundary)
+	// Check if we should send snapshots (at snapshotInterval boundary)
 	now := time.Now()
-	currentMinute := now.Minute()
+	currentInterval := now.Truncate(snapshotInterval)
 
 	n.mu.Lock()
-	shouldSend := currentMinute != n.lastSnapshotMinute
+	shouldSend := !currentInterval.Equal(n.lastSnapshotTime)
 	if shouldSend {
-		n.lastSnapshotMinute = currentMinute
+		n.lastSnapshotTime = currentInterval
 	}
 	n.mu.Unlock()
 
-	// Send all snapshots at minute boundary
+	// Send snapshots at interval boundary
 	if shouldSend {
 		n.sendMinuteSnapshots(now)
 	}
@@ -176,14 +172,14 @@ func (n *NobitexDepthWS) onMessage(conn *websocket.Conn, message []byte) ([]byte
 }
 
 // sendMinuteSnapshots sends all current depth snapshots to Kafka.
-// Called once per minute at the minute boundary.
+// Called once per snapshotInterval at the interval boundary.
 func (n *NobitexDepthWS) sendMinuteSnapshots(snapshotTime time.Time) {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
 
-	// Convert to UTC and truncate to minute boundary (e.g., 12:05:00 UTC)
-	minuteTime := snapshotTime.UTC().Truncate(time.Minute)
-	timeStr := minuteTime.Format(time.RFC3339)
+	// Convert to UTC and truncate to snapshotInterval boundary
+	intervalTime := snapshotTime.UTC().Truncate(snapshotInterval)
+	timeStr := intervalTime.Format(time.RFC3339)
 
 	sentCount := 0
 

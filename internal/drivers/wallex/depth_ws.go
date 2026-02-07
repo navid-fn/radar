@@ -3,13 +3,13 @@
 // # Collection Strategy
 //
 // The scraper maintains a continuous WebSocket connection but only sends
-// orderbook snapshots to Kafka at 1-minute intervals (e.g., 12:00, 12:01, 12:02).
+// orderbook snapshots to Kafka at 5-minute intervals (e.g., 12:00, 12:05, 12:10).
 //
 // How it works:
 //   - Stays connected to WebSocket continuously
 //   - Receives and stores the latest depth data for each symbol
-//   - At each minute mark, sends the current state as a snapshot
-//   - Ignores intermediate updates between minute marks
+//   - At each 5-minute mark, sends the current state as a snapshot
+//   - Ignores intermediate updates between interval marks
 //
 // # WebSocket Channels
 //
@@ -17,7 +17,7 @@
 //   - {symbol}@buyDepth: Buy-side orderbook updates
 //   - {symbol}@sellDepth: Sell-side orderbook updates
 //
-// Both sides are aggregated into a single snapshot per symbol per minute.
+// Both sides are aggregated into a single snapshot per symbol per 5-minute interval.
 package wallex
 
 import (
@@ -37,8 +37,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// snapshotInterval defines how often to send snapshots (every 1 minute)
-const snapshotInterval = 1 * time.Minute
+// snapshotInterval defines how often to send snapshots
+const snapshotInterval = 5 * time.Minute
 
 // symbolDepth holds the latest depth data for a single symbol.
 // Updated continuously but only sent at minute intervals.
@@ -59,29 +59,28 @@ type WallexDepthWS struct {
 	depthStore map[string]*symbolDepth
 	mu         sync.RWMutex
 
-	// lastSnapshotMinute tracks the last minute we sent snapshots
-	// to ensure we only send once per minute
-	lastSnapshotMinute int
+	// lastSnapshotTime tracks the last interval we sent snapshots
+	// to ensure we only send once per snapshotInterval
+	lastSnapshotTime time.Time
 }
 
 func NewWallexDepthScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *WallexDepthWS {
 	return &WallexDepthWS{
 		sender:             scraper.NewSender(kafkaWriter, logger),
 		logger:             logger.With("scraper", "wallex-depth-ws"),
-		depthStore:         make(map[string]*symbolDepth),
-		lastSnapshotMinute: -1,
+		depthStore: make(map[string]*symbolDepth),
 	}
 }
 
 // Name returns the scraper identifier used for logging and metrics.
 func (w *WallexDepthWS) Name() string { return "wallex-depth" }
 
-// Run starts the depth data collection with 1-minute snapshots.
+// Run starts the depth data collection with 5-minute snapshots.
 //
 // The scraper:
 //  1. Connects to WebSocket and stays connected
 //  2. Continuously receives and stores depth updates
-//  3. Sends snapshots to Kafka only at minute boundaries (12:00, 12:01, etc.)
+//  3. Sends snapshots to Kafka only at 5-minute boundaries (12:00, 12:05, etc.)
 //
 // The method blocks until the context is cancelled.
 func (w *WallexDepthWS) Run(ctx context.Context) error {
@@ -181,18 +180,18 @@ func (w *WallexDepthWS) onMessage(conn *websocket.Conn, message []byte) ([]byte,
 	// Update depth store
 	w.updateDepthStore(symbol, levels, isSellSide)
 
-	// Check if we should send snapshots (at minute boundary)
+	// Check if we should send snapshots (at snapshotInterval boundary)
 	now := time.Now()
-	currentMinute := now.Minute()
+	currentInterval := now.Truncate(snapshotInterval)
 
 	w.mu.Lock()
-	shouldSend := currentMinute != w.lastSnapshotMinute
+	shouldSend := !currentInterval.Equal(w.lastSnapshotTime)
 	if shouldSend {
-		w.lastSnapshotMinute = currentMinute
+		w.lastSnapshotTime = currentInterval
 	}
 	w.mu.Unlock()
 
-	// Send all snapshots at minute boundary
+	// Send snapshots at interval boundary
 	if shouldSend {
 		w.sendMinuteSnapshots(now)
 	}
@@ -219,14 +218,14 @@ func (w *WallexDepthWS) updateDepthStore(symbol string, levels []*pb.OrderLevel,
 }
 
 // sendMinuteSnapshots sends all current depth snapshots to Kafka.
-// Called once per minute at the minute boundary.
+// Called once per snapshotInterval at the interval boundary.
 func (w *WallexDepthWS) sendMinuteSnapshots(snapshotTime time.Time) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
-	// Convert to UTC and truncate to minute boundary (e.g., 12:05:00 UTC)
-	minuteTime := snapshotTime.UTC().Truncate(time.Minute)
-	timeStr := minuteTime.Format(time.RFC3339)
+	// Convert to UTC and truncate to snapshotInterval boundary
+	intervalTime := snapshotTime.UTC().Truncate(snapshotInterval)
+	timeStr := intervalTime.Format(time.RFC3339)
 
 	sentCount := 0
 	skippedCount := 0

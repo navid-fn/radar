@@ -141,8 +141,8 @@ func (n *NobitexOHLC) fetchAllSymbols(ctx context.Context) error {
 // fetchOHLC fetches OHLC data for a single symbol (last 30 days).
 // Retries up to 3 times on timeout/connection errors with 2 second delay.
 func (n *NobitexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
-	// Fetch last 30 days of daily OHLC
-	fromTimestamp := scraper.ToMidnight(time.Now().AddDate(0, 0, -30)).Unix()
+	// Fetch last 2 days of daily OHLC
+	fromTimestamp := scraper.ToMidnight(time.Now().AddDate(0, 0, -2)).Unix()
 	toTimestamp := scraper.ToMidnight(time.Now()).AddDate(0, 0, -1).Unix()
 
 	url := fmt.Sprintf(ohlcAPI, symbol, fromTimestamp, toTimestamp)

@@ -34,9 +34,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// snapshotInterval defines how often to send snapshots (every 1 minute)
+// snapshotInterval defines how often to send snapshots
 // TODO: we can use config for reading/changing this interval later
-const snapshotInterval = 1 * time.Minute
+const snapshotInterval = 5 * time.Minute
 
 type RamzinexDepthWS struct {
 	sender       *scraper.Sender
@@ -48,9 +48,9 @@ type RamzinexDepthWS struct {
 	depthStore map[string]*pb.OrderBookSnapshot
 	mu         sync.RWMutex
 
-	// lastSnapshotMinute tracks the last minute we sent snapshots
-	// to ensure we only send once per minute
-	lastSnapshotMinute int
+	// lastSnapshotTime tracks the last interval we sent snapshots
+	// to ensure we only send once per snapshotInterval
+	lastSnapshotTime time.Time
 }
 
 func NewRamzinexDepthScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *RamzinexDepthWS {
@@ -60,10 +60,6 @@ func NewRamzinexDepthScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *Ra
 		pairIDToName: make(map[int]string),
 
 		depthStore: make(map[string]*pb.OrderBookSnapshot),
-
-		// when DepthWs start, we dont check minute, we store snapshot then store minute
-		// then update it for get next snapshot for next minute
-		lastSnapshotMinute: -1,
 	}
 }
 
@@ -156,18 +152,18 @@ func (r *RamzinexDepthWS) onMessage(conn *websocket.Conn, message []byte) ([]byt
 		}
 	}
 
-	// Check if we should send snapshots (at minute boundary)
+	// Check if we should send snapshots (at snapshotInterval boundary)
 	now := time.Now()
-	currentMinute := now.Minute()
+	currentInterval := now.Truncate(snapshotInterval)
 
 	r.mu.Lock()
-	shouldSend := currentMinute != r.lastSnapshotMinute
+	shouldSend := !currentInterval.Equal(r.lastSnapshotTime)
 	if shouldSend {
-		r.lastSnapshotMinute = currentMinute
+		r.lastSnapshotTime = currentInterval
 	}
 	r.mu.Unlock()
 
-	// Send all snapshots at minute boundary
+	// Send snapshots at interval boundary
 	if shouldSend {
 		r.sendMinuteSnapshots(now)
 	}
@@ -177,14 +173,14 @@ func (r *RamzinexDepthWS) onMessage(conn *websocket.Conn, message []byte) ([]byt
 }
 
 // sendMinuteSnapshots sends all current depth snapshots to Kafka.
-// Called once per minute at the minute boundary.
+// Called once per snapshotInterval at the interval boundary.
 func (r *RamzinexDepthWS) sendMinuteSnapshots(snapshotTime time.Time) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	// Convert to UTC and truncate to minute boundary (e.g., 12:05:00 UTC)
-	minuteTime := snapshotTime.UTC().Truncate(time.Minute)
-	timeStr := minuteTime.Format(time.RFC3339)
+	// Convert to UTC and truncate to snapshotInterval boundary
+	intervalTime := snapshotTime.UTC().Truncate(snapshotInterval)
+	timeStr := intervalTime.Format(time.RFC3339)
 
 	sentCount := 0
 

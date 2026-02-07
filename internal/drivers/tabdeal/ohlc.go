@@ -138,8 +138,8 @@ func (r *TabdealOHLC) fetchAllSymbols(ctx context.Context) error {
 // Retries up to 3 times on timeout/connection errors with 2 second delay.
 func (r *TabdealOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 	// Fetch last 30 days of daily OHLC
-	fromTimestamp := scraper.ToMidnight(time.Now().AddDate(0, 0, -30)).Unix()
-	toTimestamp := scraper.ToMidnight(time.Now()).AddDate(0, 0, -2).Unix()
+	fromTimestamp := scraper.ToMidnight(time.Now().AddDate(0, 0, -3)).Unix()
+	toTimestamp := scraper.ToMidnight(time.Now()).AddDate(0, 0, -1).Unix()
 	symbolUrl := strings.Replace(scraper.NormalizeSymbol("tabdeal", symbol), "/", "_", 1)
 	url := fmt.Sprintf(ohlcURL, symbolUrl, fromTimestamp, toTimestamp)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)

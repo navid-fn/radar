@@ -43,9 +43,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// snapshotInterval defines how often to send snapshots (every 1 minute)
+// snapshotInterval defines how often to send snapshots
 // TODO: we can use config for reading/changing this interval later
-const snapshotInterval = 1 * time.Minute
+const snapshotInterval = 5 * time.Minute
 
 type BitpinDepthWS struct {
 	sender     *scraper.Sender
@@ -53,9 +53,9 @@ type BitpinDepthWS struct {
 	depthStore map[string]*pb.OrderBookSnapshot
 	mu         sync.RWMutex
 
-	// lastSnapshotMinute tracks the last minute we sent snapshots
-	// to ensure we only send once per minute
-	lastSnapshotMinute int
+	// lastSnapshotTime tracks the last interval we sent snapshots
+	// to ensure we only send once per snapshotInterval
+	lastSnapshotTime time.Time
 }
 
 func NewBitpinWsDepthScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *BitpinDepthWS {
@@ -63,21 +63,17 @@ func NewBitpinWsDepthScraper(kafkaWriter *kafka.Writer, logger *slog.Logger) *Bi
 		sender:     scraper.NewSender(kafkaWriter, logger),
 		logger:     logger.With("scraper", "bitpin-ws-depth"),
 		depthStore: make(map[string]*pb.OrderBookSnapshot),
-
-		// when DepthWs start, we dont check minute, we store snapshot then store minute
-		// then update it for get next snapshot for next minute
-		lastSnapshotMinute: -1,
 	}
 }
 
 func (b *BitpinDepthWS) Name() string { return "bitpin-ws-depth" }
 
-// Run starts the depth data collection with 1-minute snapshots.
+// Run starts the depth data collection with 5-minute snapshots.
 //
 // The scraper:
 //  1. Connects to WebSocket and stays connected
 //  2. Continuously receives and stores depth updates
-//  3. Sends snapshots to Kafka only at minute boundaries (12:00, 12:01, etc.)
+//  3. Sends snapshots to Kafka only at 5-minute boundaries (12:00, 12:05, etc.)
 //
 // The method blocks until the context is cancelled.
 func (b *BitpinDepthWS) Run(ctx context.Context) error {
@@ -140,18 +136,18 @@ func (b *BitpinDepthWS) onMessage(conn *websocket.Conn, message []byte) ([]byte,
 		}
 	}
 
-	// Check if we should send snapshots (at minute boundary)
+	// Check if we should send snapshots (at snapshotInterval boundary)
 	now := time.Now()
-	currentMinute := now.Minute()
+	currentInterval := now.Truncate(snapshotInterval)
 
 	b.mu.Lock()
-	shouldSend := currentMinute != b.lastSnapshotMinute
+	shouldSend := !currentInterval.Equal(b.lastSnapshotTime)
 	if shouldSend {
-		b.lastSnapshotMinute = currentMinute
+		b.lastSnapshotTime = currentInterval
 	}
 	b.mu.Unlock()
 
-	// Send all snapshots at minute boundary
+	// Send snapshots at interval boundary
 	if shouldSend {
 		b.sendMinuteSnapshots(now)
 	}
@@ -161,14 +157,14 @@ func (b *BitpinDepthWS) onMessage(conn *websocket.Conn, message []byte) ([]byte,
 }
 
 // sendMinuteSnapshots sends all current depth snapshots to Kafka.
-// Called once per minute at the minute boundary.
+// Called once per snapshotInterval at the interval boundary.
 func (b *BitpinDepthWS) sendMinuteSnapshots(snapshotTime time.Time) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	// Convert to UTC and truncate to minute boundary (e.g., 12:05:00 UTC)
-	minuteTime := snapshotTime.UTC().Truncate(time.Minute)
-	timeStr := minuteTime.Format(time.RFC3339)
+	// Convert to UTC and truncate to snapshotInterval boundary
+	intervalTime := snapshotTime.UTC().Truncate(snapshotInterval)
+	timeStr := intervalTime.Format(time.RFC3339)
 
 	sentCount := 0
 

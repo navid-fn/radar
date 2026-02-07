@@ -189,7 +189,7 @@ func (r *RamzinexOHLC) fetchAllSymbols(ctx context.Context) error {
 
 // create url with encoded params
 func (r *RamzinexOHLC) createURL(symbol string) string {
-	// Fetch last 30 days of daily OHLC
+	// Fetch last 2 days of daily OHLC
 	fromTimestamp := scraper.ToMidnight(time.Now().AddDate(0, 0, -2)).Unix()
 	toTimestamp := scraper.ToMidnight(time.Now()).AddDate(0, 0, -1).Unix()
 
