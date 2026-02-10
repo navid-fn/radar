@@ -123,11 +123,11 @@ func main() {
 	// shutdown function
 	shutdown := func() {
 		// stop kafka writers
-		defer tradeWriter.Close()
-		defer ohlcWriter.Close()
-		defer depthWriter.Close()
+		tradeWriter.Close()
+		ohlcWriter.Close()
+		depthWriter.Close()
 		// context signal stop
-		defer stop()
+		stop()
 	}
 	defer shutdown()
 

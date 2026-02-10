@@ -35,3 +35,5 @@ Thumbs.db
 coverage.txt
 #env variables
 .env
+# Jalali calender
+jalali_calendar.csv

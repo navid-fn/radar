@@ -92,12 +92,12 @@ func main() {
 	// shutdown function to close all connections
 	shutdown := func() {
 		// close database connection
-		defer store.Close()
+		store.Close()
 
 		// close kafka readers
-		defer tradeReader.Close()
-		defer ohlcReader.Close()
-		defer depthReader.Close()
+		tradeReader.Close()
+		ohlcReader.Close()
+		depthReader.Close()
 
 		defer stop()
 	}
