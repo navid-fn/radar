@@ -1,5 +1,5 @@
 // Package nobitex provides scrapers for Nobitex exchange.
-// This file implements OHLC (candlestick) data scraping.
+// This file implements Candle (candlestick) data scraping.
 // API Doc: https://apidocs.nobitex.ir/#6ae2dae4a2
 //
 // Response format:
@@ -30,9 +30,9 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// OHLCResponse represents the Nobitex OHLC API response.
+// CandleResponse represents the Nobitex Candle API response.
 // Arrays are parallel: t[i], o[i], h[i], l[i], c[i], v[i] form one candle.
-type OHLCResponse struct {
+type CandleResponse struct {
 	Status     string    `json:"s"`
 	Timestamps []int64   `json:"t"`
 	Opens      []float64 `json:"o"`
@@ -42,9 +42,9 @@ type OHLCResponse struct {
 	Volumes    []float64 `json:"v"`
 }
 
-// NobitexOHLC scrapes OHLC data from Nobitex API.
+// NobitexCandle scrapes Candle data from Nobitex API.
 // Runs daily at 4:30 AM Tehran time, fetches data, then waits for next day.
-type NobitexOHLC struct {
+type NobitexCandleScraper struct {
 	sender      *scraper.Sender
 	logger      *slog.Logger
 	rateLimiter *rate.Limiter
@@ -53,31 +53,35 @@ type NobitexOHLC struct {
 	usdtMu    sync.RWMutex
 }
 
-// NewNobitexOHLCScraper creates a new Nobitex OHLC scraper.
-func NewNobitexOHLCScraper(writer scraper.MessageWriter, logger *slog.Logger) *NobitexOHLC {
-	return &NobitexOHLC{
+// NewNobitexCandleScraper creates a new Nobitex candle scraper.
+func NewNobitexCandleScraper(writer scraper.MessageWriter, logger *slog.Logger) *NobitexCandleScraper {
+	return &NobitexCandleScraper{
 		sender: scraper.NewSender(writer, logger),
-		logger: logger.With("scraper", "nobitex-ohlc"),
+		logger: logger.With("scraper", "nobitex-candle"),
 	}
 }
 
-func (n *NobitexOHLC) Name() string { return "nobitex-ohlc" }
+func NewNobitexCandleScraperScraper(writer scraper.MessageWriter, logger *slog.Logger) *NobitexCandleScraper {
+	return NewNobitexCandleScraper(writer, logger)
+}
 
-// Run starts the OHLC scraper with a daily schedule at 4:30 AM Tehran time.
+func (n *NobitexCandleScraper) Name() string { return "nobitex-candle" }
+
+// Run starts the Candle scraper with a daily schedule at 4:30 AM Tehran time.
 // It waits until 4:30 AM, fetches all symbols, then waits for next day's 4:30 AM.
-func (n *NobitexOHLC) Run(ctx context.Context) error {
+func (n *NobitexCandleScraper) Run(ctx context.Context) error {
 	n.usdtPrice = getLatestUSDTPrice()
 	tehran, err := time.LoadLocation("Asia/Tehran")
 	if err != nil {
 		return fmt.Errorf("failed to load Tehran timezone: %w", err)
 	}
 
-	n.logger.Info("Starting Nobitex OHLC scraper (scheduled daily at 4:30 AM Tehran)")
+	n.logger.Info("Starting Nobitex Candle scraper (scheduled daily at 4:30 AM Tehran)")
 
 	n.logger.Info("Executing initial startup fetch...")
 	if err := n.fetchAllSymbols(ctx); err != nil {
 		// Log error but don't crash; let the schedule continue
-		n.logger.Error("Initial OHLC fetch failed", "error", err)
+		n.logger.Error("Initial Candle fetch failed", "error", err)
 	}
 
 	for {
@@ -88,22 +92,28 @@ func (n *NobitexOHLC) Run(ctx context.Context) error {
 			next = next.Add(24 * time.Hour)
 		}
 
-		n.logger.Info("Next OHLC fetch scheduled", "at", next.Format(time.RFC3339), "in", time.Until(next).Round(time.Minute))
+		n.logger.Info(
+			"Next Candle fetch scheduled",
+			"at",
+			next.Format(time.RFC3339),
+			"in",
+			time.Until(next).Round(time.Minute),
+		)
 
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-time.After(time.Until(next)):
-			n.logger.Info("Starting daily OHLC fetch")
+			n.logger.Info("Starting daily Candle fetch")
 			if err := n.fetchAllSymbols(ctx); err != nil {
-				n.logger.Error("OHLC fetch failed", "error", err)
+				n.logger.Error("Candle fetch failed", "error", err)
 			}
 		}
 	}
 }
 
-// fetchAllSymbols fetches OHLC data for all available symbols.
-func (n *NobitexOHLC) fetchAllSymbols(ctx context.Context) error {
+// fetchAllSymbols fetches Candle data for all available symbols.
+func (n *NobitexCandleScraper) fetchAllSymbols(ctx context.Context) error {
 	symbols, err := fetchMarkets()
 	if err != nil {
 		return err
@@ -127,20 +137,20 @@ func (n *NobitexOHLC) fetchAllSymbols(ctx context.Context) error {
 			return err
 		}
 
-		if err := n.fetchOHLC(ctx, symbol); err != nil {
-			n.logger.Warn("Failed to fetch OHLC", "symbol", symbol, "error", err)
+		if err := n.fetchCandle(ctx, symbol); err != nil {
+			n.logger.Warn("Failed to fetch Candle", "symbol", symbol, "error", err)
 			continue
 		}
 	}
 
-	n.logger.Info("OHLC fetch completed", "symbols", len(symbols))
+	n.logger.Info("Candle fetch completed", "symbols", len(symbols))
 	return nil
 }
 
-// fetchOHLC fetches OHLC data for a single symbol (last 30 days).
+// fetchCandle fetches Candle data for a single symbol (last 30 days).
 // Retries up to 3 times on timeout/connection errors with 2 second delay.
-func (n *NobitexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
-	// Fetch last 2 days of daily OHLC
+func (n *NobitexCandleScraper) fetchCandle(ctx context.Context, symbol string) error {
+	// Fetch last 2 days of daily Candle
 	fromTimestamp := scraper.ToMidnight(time.Now().AddDate(0, 0, -2)).Unix()
 	toTimestamp := scraper.ToMidnight(time.Now()).AddDate(0, 0, -1).Unix()
 
@@ -160,7 +170,7 @@ func (n *NobitexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 		return fmt.Errorf("status %d", resp.StatusCode)
 	}
 
-	var data OHLCResponse
+	var data CandleResponse
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return err
 	}
@@ -176,7 +186,7 @@ func (n *NobitexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 	}
 	if len(data.Opens) != length || len(data.Highs) != length ||
 		len(data.Lows) != length || len(data.Closes) != length || len(data.Volumes) != length {
-		return fmt.Errorf("mismatched array lengths in OHLC response")
+		return fmt.Errorf("mismatched array lengths in Candle response")
 	}
 
 	cleanedSymbol := scraper.NormalizeSymbol("nobitex", symbol)
@@ -192,8 +202,8 @@ func (n *NobitexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 	for i := range length {
 		openTime := scraper.UnixToRFC3339(data.Timestamps[i])
 
-		ohlc := &proto.OHLCData{
-			Id:        scraper.GenerateOHLCID("nobitex", cleanedSymbol, "1d", openTime),
+		ohlc := &proto.CandleData{
+			Id:        scraper.GenerateCandleID("nobitex", cleanedSymbol, "1d", openTime),
 			Exchange:  "nobitex",
 			Symbol:    cleanedSymbol,
 			Interval:  "1d",
@@ -206,7 +216,7 @@ func (n *NobitexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 			OpenTime:  openTime,
 		}
 
-		if err := n.sender.SendOHLC(ctx, ohlc); err != nil {
+		if err := n.sender.SendCandle(ctx, ohlc); err != nil {
 			// TODO: add metric
 			n.logger.Debug("send error", "error", err)
 		}

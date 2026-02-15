@@ -78,7 +78,7 @@ func (n *NobitexWS) onSubscribe(conn *websocket.Conn, symbols []string) error {
 	return nil
 }
 
-func (n *NobitexWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, error) {
+func (n *NobitexWS) onMessage(conn *websocket.Conn, message []byte) ([]proto.Message, error) {
 	var trades []*pb.TradeData
 	scanner := bufio.NewScanner(bytes.NewReader(message))
 	for scanner.Scan() {
@@ -87,9 +87,13 @@ func (n *NobitexWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, err
 		}
 	}
 	if len(trades) == 0 {
-		return nil, nil
+		return nil, fmt.Errorf("no trade found")
 	}
-	return proto.Marshal(&pb.TradeDataBatch{Trades: trades})
+	messages := make([]proto.Message, 0, len(trades))
+	for _, trade := range trades {
+		messages = append(messages, trade)
+	}
+	return messages, nil
 }
 
 func (n *NobitexWS) parseLine(conn *websocket.Conn, line []byte) *pb.TradeData {
@@ -168,7 +172,14 @@ func (n *NobitexWS) createTrade(data map[string]any, symbol string) *pb.TradeDat
 	n.usdtMu.RUnlock()
 
 	return &pb.TradeData{
-		Id:        scraper.GenerateTradeID("nobitex", cleanedSymbol, getTimeValue(data, "time"), cleanedPrice, volume, getStringValue(data, "type")),
+		Id: scraper.GenerateTradeID(
+			"nobitex",
+			cleanedSymbol,
+			getTimeValue(data, "time"),
+			cleanedPrice,
+			volume,
+			getStringValue(data, "type"),
+		),
 		Exchange:  "nobitex",
 		Symbol:    cleanedSymbol,
 		Price:     cleanedPrice,

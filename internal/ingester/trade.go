@@ -10,8 +10,8 @@ import (
 	"math"
 	"time"
 
-	"nobitex/radar/internal/models"
 	pb "nobitex/radar/internal/proto"
+	"nobitex/radar/internal/storage/models"
 
 	"github.com/segmentio/kafka-go"
 	"google.golang.org/protobuf/proto"
@@ -37,7 +37,12 @@ type TradeIngester struct {
 }
 
 // NewTradeIngester creates a new trade ingester.
-func NewTradeIngester(reader *kafka.Reader, storage TradeStorage, logger *slog.Logger, cfg TradeIngesterConfig) *TradeIngester {
+func NewTradeIngester(
+	reader *kafka.Reader,
+	storage TradeStorage,
+	logger *slog.Logger,
+	cfg TradeIngesterConfig,
+) *TradeIngester {
 	return &TradeIngester{
 		reader:  reader,
 		storage: storage,
@@ -116,13 +121,13 @@ func (ti *TradeIngester) Start(ctx context.Context) error {
 				continue
 			}
 
-			trades, err := ti.parseMessage(m)
+			trade, err := ti.parseMessage(m)
 			if err != nil {
 				ti.logger.Debug("Parse error", "error", err)
 				continue
 			}
 
-			batch = append(batch, trades...)
+			batch = append(batch, trade)
 			msgs = append(msgs, m)
 
 			if len(batch) >= ti.cfg.BatchSize {
@@ -135,39 +140,27 @@ func (ti *TradeIngester) Start(ctx context.Context) error {
 }
 
 // parseMessage deserializes a Kafka message into Trade models.
-func (ti *TradeIngester) parseMessage(msg kafka.Message) ([]*models.Trade, error) {
-	// Try single trade first
+func (ti *TradeIngester) parseMessage(msg kafka.Message) (*models.Trade, error) {
 	var single pb.TradeData
-	if err := proto.Unmarshal(msg.Value, &single); err == nil && single.Id != "" && single.Exchange != "" && single.Symbol != "" {
-		return ti.convertList([]*pb.TradeData{&single})
-	}
-
-	// Try batch
-	var batch pb.TradeDataBatch
-	if err := proto.Unmarshal(msg.Value, &batch); err == nil && len(batch.Trades) > 0 {
-		if batch.Trades[0].Id != "" && batch.Trades[0].Exchange != "" {
-			return ti.convertList(batch.Trades)
-		}
+	if err := proto.Unmarshal(
+		msg.Value,
+		&single,
+	); err == nil && single.Id != "" && single.Exchange != "" &&
+		single.Symbol != "" {
+		return ti.convert(&single)
 	}
 
 	return nil, fmt.Errorf("unknown message format")
 }
 
-// convertList transforms protobuf trades to database models.
-func (ti *TradeIngester) convertList(list []*pb.TradeData) ([]*models.Trade, error) {
-	result := make([]*models.Trade, 0, len(list))
-	for _, p := range list {
-		t, err := ti.transform(p)
-		if err != nil {
-			ti.logger.Warn("Trade validation failed", "error", err, "id", p.Id)
-			continue
-		}
-		result = append(result, t)
+// convert transforms protobuf trades to database models.
+func (ti *TradeIngester) convert(trade *pb.TradeData) (*models.Trade, error) {
+	t, err := ti.transform(trade)
+	if err != nil {
+		ti.logger.Warn("Trade validation failed", "error", err, "id", trade.Id)
+		return nil, err
 	}
-	if len(result) == 0 {
-		return nil, fmt.Errorf("no valid trades")
-	}
-	return result, nil
+	return t, nil
 }
 
 // transform converts a protobuf trade to a database model.

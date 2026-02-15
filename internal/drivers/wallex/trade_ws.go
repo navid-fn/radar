@@ -71,15 +71,15 @@ func (w *WallexWS) onSubscribe(conn *websocket.Conn, symbols []string) error {
 	return nil
 }
 
-func (w *WallexWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, error) {
+func (w *WallexWS) onMessage(conn *websocket.Conn, message []byte) ([]proto.Message, error) {
 	msgStr := strings.TrimSpace(string(message))
 	if strings.Contains(msgStr, `"sid":`) {
-		return nil, nil
+		return nil, fmt.Errorf("unknown message")
 	}
 
 	var raw []any
 	if json.Unmarshal(message, &raw) != nil || len(raw) < 2 {
-		return nil, nil
+		return nil, fmt.Errorf("cant Unmarshal message")
 	}
 
 	channel, _ := raw[0].(string)
@@ -89,6 +89,9 @@ func (w *WallexWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, erro
 	}
 
 	parts := strings.Split(channel, "@")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("cant find symbol in channel")
+	}
 	symbol := scraper.NormalizeSymbol("wallex", parts[0])
 
 	side := "buy"
@@ -117,6 +120,5 @@ func (w *WallexWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, erro
 		Time:      timestamp,
 		UsdtPrice: w.usdtPrice,
 	}
-
-	return proto.Marshal(trade)
+	return []proto.Message{trade}, nil
 }

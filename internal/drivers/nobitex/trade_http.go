@@ -16,7 +16,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-type NobitexAPI struct {
+type NobitexHttpScraper struct {
 	sender      *scraper.Sender
 	logger      *slog.Logger
 	rateLimiter *rate.Limiter
@@ -24,16 +24,16 @@ type NobitexAPI struct {
 	usdtMu      sync.RWMutex
 }
 
-func NewNobitexAPIScraper(writer scraper.MessageWriter, logger *slog.Logger) *NobitexAPI {
-	return &NobitexAPI{
+func NewNobitexHttpScraper(writer scraper.MessageWriter, logger *slog.Logger) *NobitexHttpScraper {
+	return &NobitexHttpScraper{
 		sender: scraper.NewSender(writer, logger),
 		logger: logger.With("scraper", "nobitex-api"),
 	}
 }
 
-func (n *NobitexAPI) Name() string { return "nobitex-api" }
+func (n *NobitexHttpScraper) Name() string { return "nobitex-api" }
 
-func (n *NobitexAPI) Run(ctx context.Context) error {
+func (n *NobitexHttpScraper) Run(ctx context.Context) error {
 	n.usdtPrice = getLatestUSDTPrice()
 	n.logger.Info("Starting Nobitex API scraper")
 
@@ -59,7 +59,7 @@ func (n *NobitexAPI) Run(ctx context.Context) error {
 	return nil
 }
 
-func (n *NobitexAPI) pollSymbol(ctx context.Context, symbol string) {
+func (n *NobitexHttpScraper) pollSymbol(ctx context.Context, symbol string) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -78,7 +78,7 @@ func (n *NobitexAPI) pollSymbol(ctx context.Context, symbol string) {
 	}
 }
 
-func (n *NobitexAPI) fetchTrades(ctx context.Context, symbol string) error {
+func (n *NobitexHttpScraper) fetchTrades(ctx context.Context, symbol string) error {
 	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf(latestTradeAPI, symbol), nil)
 	if err != nil {
 		return err

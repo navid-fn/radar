@@ -51,15 +51,15 @@ func main() {
 		ramzinex.NewRamzinexScraper(tradeWriter, logger),
 		ramzinex.NewRamzinexAPIScraper(tradeWriter, logger),
 		bitpin.NewBitpinScraper(tradeWriter, logger),
-		bitpin.NewBitpinAPIScraper(tradeWriter, logger),
+		bitpin.NewBitpinHttpScraper(tradeWriter, logger),
 		tabdeal.NewTabdealScraper(tradeWriter, logger),
 		coingecko.NewCoinGeckoScraper(tradeWriter, logger, &appConfig.Coingecko),
 	}
 
-	// Kafka writer for OHLC (separate topic)
-	ohlcWriter := &kafka.Writer{
-		Addr:         kafka.TCP(appConfig.KafkaOHLC.Broker),
-		Topic:        appConfig.KafkaOHLC.Topic,
+	// Kafka writer for candle (separate topic)
+	candleWriter := &kafka.Writer{
+		Addr:         kafka.TCP(appConfig.KafkaCandle.Broker),
+		Topic:        appConfig.KafkaCandle.Topic,
 		Balancer:     &kafka.LeastBytes{},
 		BatchSize:    100,
 		BatchTimeout: 10 * time.Millisecond,
@@ -67,19 +67,19 @@ func main() {
 		Compression:  kafka.Zstd,
 	}
 
-	// Register OHLC scrapers
-	ohlcScrapers := []scraper.Scraper{
-		nobitex.NewNobitexOHLCScraper(ohlcWriter, logger),
-		wallex.NewWallexOHLCScraper(ohlcWriter, logger),
-		ramzinex.NewRamzinexOHLCScraper(ohlcWriter, logger),
-		bitpin.NewBitpinOHLCScraper(ohlcWriter, logger),
-		tabdeal.NewTabdealOHLCScraper(ohlcWriter, logger),
+	// Register candle scrapers
+	candleScrapers := []scraper.Scraper{
+		nobitex.NewNobitexCandleScraper(candleWriter, logger),
+		wallex.NewWallexCandleScraper(candleWriter, logger),
+		ramzinex.NewRamzinexCandleScraper(candleWriter, logger),
+		bitpin.NewBitpinCandleScraper(candleWriter, logger),
+		tabdeal.NewTabdealCandleScraper(candleWriter, logger),
 	}
 
-	// Kafka writer for Depth (separate topic)
-	depthWriter := &kafka.Writer{
-		Addr:         kafka.TCP(appConfig.KafkaDepth.Broker),
-		Topic:        appConfig.KafkaDepth.Topic,
+	// Kafka writer for orderbook (separate topic)
+	orderbookWriter := &kafka.Writer{
+		Addr:         kafka.TCP(appConfig.KafkaOrderbook.Broker),
+		Topic:        appConfig.KafkaOrderbook.Topic,
 		Balancer:     &kafka.LeastBytes{},
 		BatchSize:    100,
 		BatchTimeout: 10 * time.Millisecond,
@@ -87,24 +87,24 @@ func main() {
 		Compression:  kafka.Zstd,
 	}
 
-	// Register Depth scrapers
-	depthScrapers := []scraper.Scraper{
-		nobitex.NewNobitexDepthScraper(depthWriter, logger),
-		wallex.NewWallexDepthScraper(depthWriter, logger),
-		bitpin.NewBitpinWsDepthScraper(depthWriter, logger),
-		ramzinex.NewRamzinexDepthScraper(depthWriter, logger),
+	// Register orderbook scrapers
+	orderbookScrapers := []scraper.Scraper{
+		nobitex.NewNobitexOrderbookScraper(orderbookWriter, logger),
+		wallex.NewWallexOrderbookScraper(orderbookWriter, logger),
+		bitpin.NewBitpinOrderbookScraper(orderbookWriter, logger),
+		ramzinex.NewRamzinexOrderbookScraper(orderbookWriter, logger),
 	}
 
-	scrapers := append(tradeScrapers, ohlcScrapers...)
-	scrapers = append(scrapers, depthScrapers...)
+	scrapers := append(tradeScrapers, candleScrapers...)
+	scrapers = append(scrapers, orderbookScrapers...)
 
 	// Setup graceful shutdown
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
 	logger.Info("Starting scrapers",
 		"trade_topic", appConfig.KafkaTrade.Topic,
-		"ohlc_topic", appConfig.KafkaOHLC.Topic,
-		"depth_topic", appConfig.KafkaDepth.Topic,
+		"candle_topic", appConfig.KafkaCandle.Topic,
+		"orderbook_topic", appConfig.KafkaOrderbook.Topic,
 	)
 
 	// Start all scrapers
@@ -124,8 +124,8 @@ func main() {
 	shutdown := func() {
 		// stop kafka writers
 		tradeWriter.Close()
-		ohlcWriter.Close()
-		depthWriter.Close()
+		candleWriter.Close()
+		orderbookWriter.Close()
 		// context signal stop
 		stop()
 	}

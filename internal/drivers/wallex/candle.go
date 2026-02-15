@@ -81,15 +81,19 @@ type WallexOHLC struct {
 	usdtMu    sync.RWMutex
 }
 
-// NewWallexOHLCScraper creates a new Nobitex OHLC scraper.
-func NewWallexOHLCScraper(writer scraper.MessageWriter, logger *slog.Logger) *WallexOHLC {
+// NewWallexCandleScraper creates a new Wallex candle scraper.
+func NewWallexCandleScraper(writer scraper.MessageWriter, logger *slog.Logger) *WallexOHLC {
 	return &WallexOHLC{
 		sender: scraper.NewSender(writer, logger),
-		logger: logger.With("scraper", "wallex-ohlc"),
+		logger: logger.With("scraper", "wallex-candle"),
 	}
 }
 
-func (w *WallexOHLC) Name() string { return "wallex-ohlc" }
+func NewWallexOHLCScraper(writer scraper.MessageWriter, logger *slog.Logger) *WallexOHLC {
+	return NewWallexCandleScraper(writer, logger)
+}
+
+func (w *WallexOHLC) Name() string { return "wallex-candle" }
 
 // Run starts the OHLC scraper with a daily schedule at 4:30 AM Tehran time.
 // It waits until 4:30 AM, fetches all symbols, then waits for next day's 4:30 AM.
@@ -115,7 +119,13 @@ func (w *WallexOHLC) Run(ctx context.Context) error {
 			next = next.Add(24 * time.Hour)
 		}
 
-		w.logger.Info("next OHLC fetch scheduled", "at", next.Format(time.RFC3339), "in", time.Until(next).Round(time.Minute))
+		w.logger.Info(
+			"next OHLC fetch scheduled",
+			"at",
+			next.Format(time.RFC3339),
+			"in",
+			time.Until(next).Round(time.Minute),
+		)
 
 		select {
 		case <-ctx.Done():
@@ -230,7 +240,6 @@ func (w *WallexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 			continue
 		}
 		lowPrice, err := strconv.ParseFloat(data.Lows[i], 64)
-
 		if err != nil {
 			continue
 		}
@@ -239,8 +248,8 @@ func (w *WallexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 			continue
 		}
 
-		ohlc := &proto.OHLCData{
-			Id:        scraper.GenerateOHLCID("wallex", cleanedSymbol, "1d", openTime),
+		ohlc := &proto.CandleData{
+			Id:        scraper.GenerateCandleID("wallex", cleanedSymbol, "1d", openTime),
 			Exchange:  "wallex",
 			Symbol:    cleanedSymbol,
 			Interval:  "1d",
@@ -253,7 +262,7 @@ func (w *WallexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 			OpenTime:  openTime,
 		}
 
-		if err := w.sender.SendOHLC(ctx, ohlc); err != nil {
+		if err := w.sender.SendCandle(ctx, ohlc); err != nil {
 			// TODO: add metric
 			w.logger.Debug("send error", "error", err)
 		}

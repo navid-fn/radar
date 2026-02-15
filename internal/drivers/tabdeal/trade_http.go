@@ -3,6 +3,7 @@ package tabdeal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -10,33 +11,39 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"nobitex/radar/internal/proto"
 	"nobitex/radar/internal/scraper"
-
 )
 
-type TabdealAPI struct {
+const tabdealRequestsPerMinute = 60
+
+type httpStatusError struct {
+	statusCode int
+}
+
+func (e *httpStatusError) Error() string {
+	return fmt.Sprintf("status %d", e.statusCode)
+}
+
+type TabdealHttpScraper struct {
 	sender    *scraper.Sender
 	logger    *slog.Logger
 	usdtPrice float64
 	usdtMu    sync.RWMutex
 }
 
-func NewTabdealScraper(writer scraper.MessageWriter, logger *slog.Logger) *TabdealAPI {
-	return &TabdealAPI{
+func NewTabdealHttpScraper(writer scraper.MessageWriter, logger *slog.Logger) *TabdealHttpScraper {
+	return &TabdealHttpScraper{
 		sender: scraper.NewSender(writer, logger),
 		logger: logger.With("scraper", "tabdeal"),
 	}
 }
 
-func (t *TabdealAPI) Name() string { return "tabdeal" }
+func (t *TabdealHttpScraper) Name() string { return "tabdeal" }
 
-func (t *TabdealAPI) Run(ctx context.Context) error {
+func (t *TabdealHttpScraper) Run(ctx context.Context) error {
 	t.usdtPrice = getLatestUSDTPrice()
-	t.logger.Info("starting Tabdeal scraper", "usdtPrice", t.usdtPrice)
-
 	symbols, err := fetchMarkets()
 	if err != nil {
 		return err
@@ -44,48 +51,54 @@ func (t *TabdealAPI) Run(ctx context.Context) error {
 	if len(symbols) == 0 {
 		return fmt.Errorf("no symbols found")
 	}
+	t.logger.Info("starting Tabdeal scraper", "usdtPrice", t.usdtPrice, "symbolsCount", len(symbols))
 
-	var wg sync.WaitGroup
-	for _, sym := range symbols {
-		wg.Add(1)
-		go func(symbol string) {
-			defer wg.Done()
-			t.pollSymbol(ctx, symbol)
-		}(sym)
-	}
-	wg.Wait()
+	t.pollSymbolsRoundRobin(ctx, symbols)
 	return nil
 }
 
-func (t *TabdealAPI) pollSymbol(ctx context.Context, symbol string) {
-	consecErrors := 0
+func (t *TabdealHttpScraper) pollSymbolsRoundRobin(ctx context.Context, symbols []string) {
+	limiter := scraper.NewRateLimiter(tabdealRequestsPerMinute)
+	symbolIdx := 0
 
 	for {
-		select {
-		case <-ctx.Done():
+		if len(symbols) == 0 {
+			t.logger.Error("stopping tabdeal poller: no symbols left")
 			return
-		default:
 		}
 
-		err := t.fetchTrades(ctx, symbol)
-		if err != nil {
-			consecErrors++
-			backoff := 1 * time.Second
-			if consecErrors >= 5 {
-				backoff = 2 * time.Second
+		if err := limiter.Wait(ctx); err != nil {
+			return
+		}
+
+		symbol := symbols[symbolIdx]
+		if err := t.fetchTrades(ctx, symbol); err != nil {
+			var statusErr *httpStatusError
+			if errors.As(err, &statusErr) && statusErr.statusCode != http.StatusTooManyRequests {
+				t.logger.Warn(
+					"removing symbol from polling due to non-429 status",
+					"symbol", symbol,
+					"statusCode", statusErr.statusCode,
+					"error", err,
+				)
+				symbols = append(symbols[:symbolIdx], symbols[symbolIdx+1:]...)
+				if symbolIdx >= len(symbols) {
+					symbolIdx = 0
+				}
+				continue
 			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(backoff):
-			}
-		} else {
-			consecErrors = 0
+
+			t.logger.Warn("fetch trades failed", "symbol", symbol, "error", err)
+		}
+
+		symbolIdx++
+		if symbolIdx >= len(symbols) {
+			symbolIdx = 0
 		}
 	}
 }
 
-func (t *TabdealAPI) fetchTrades(ctx context.Context, symbol string) error {
+func (t *TabdealHttpScraper) fetchTrades(ctx context.Context, symbol string) error {
 	url := fmt.Sprintf("%s?symbol=%s&limit=%d", tradesURL, symbol, limit)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -101,12 +114,16 @@ func (t *TabdealAPI) fetchTrades(ctx context.Context, symbol string) error {
 
 	body, _ := io.ReadAll(resp.Body)
 
-	if resp.StatusCode >= 500 || isHTMLResponse(body) {
-		return fmt.Errorf("gateway error: %d", resp.StatusCode)
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return &httpStatusError{statusCode: resp.StatusCode}
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("status %d", resp.StatusCode)
+		return &httpStatusError{statusCode: resp.StatusCode}
+	}
+
+	if isHTMLResponse(body) {
+		return fmt.Errorf("unexpected html response body")
 	}
 
 	var trades []tradesInfo

@@ -16,7 +16,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-type RamzinexAPI struct {
+type RamzinexHttpScraper struct {
 	sender       *scraper.Sender
 	logger       *slog.Logger
 	pairIDToName map[int]string
@@ -25,17 +25,17 @@ type RamzinexAPI struct {
 	usdtMu       sync.RWMutex
 }
 
-func NewRamzinexAPIScraper(writer scraper.MessageWriter, logger *slog.Logger) *RamzinexAPI {
-	return &RamzinexAPI{
+func NewRamzinexHttpScraper(writer scraper.MessageWriter, logger *slog.Logger) *RamzinexHttpScraper {
+	return &RamzinexHttpScraper{
 		sender:       scraper.NewSender(writer, logger),
 		logger:       logger.With("scraper", "ramzinex-api"),
 		pairIDToName: make(map[int]string),
 	}
 }
 
-func (r *RamzinexAPI) Name() string { return "ramzinex-api" }
+func (r *RamzinexHttpScraper) Name() string { return "ramzinex-api" }
 
-func (r *RamzinexAPI) Run(ctx context.Context) error {
+func (r *RamzinexHttpScraper) Run(ctx context.Context) error {
 	r.usdtPrice = float64(getLatestUSDTPrice())
 	r.logger.Info("starting Ramzinex API scraper")
 
@@ -63,7 +63,7 @@ func (r *RamzinexAPI) Run(ctx context.Context) error {
 	return nil
 }
 
-func (r *RamzinexAPI) pollPair(ctx context.Context, pairID int) {
+func (r *RamzinexHttpScraper) pollPair(ctx context.Context, pairID int) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -81,7 +81,7 @@ func (r *RamzinexAPI) pollPair(ctx context.Context, pairID int) {
 	}
 }
 
-func (r *RamzinexAPI) fetchTrades(ctx context.Context, pairID int) error {
+func (r *RamzinexHttpScraper) fetchTrades(ctx context.Context, pairID int) error {
 	url := fmt.Sprintf(tradesAPI, pairID)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {

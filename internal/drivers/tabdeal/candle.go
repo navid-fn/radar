@@ -31,8 +31,8 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// OHLCResponse represents the tabdeal OHLC API response.
-type OHLCData struct {
+// CandleReponse represents the tabdeal candle API response.
+type CandleReponse struct {
 	Timestamp float64 `json:"time"`
 	Open      float64 `json:"open"`
 	High      float64 `json:"high"`
@@ -42,8 +42,8 @@ type OHLCData struct {
 }
 
 type OHLCResponse struct {
-	Data   []OHLCData `json:"data"`
-	NoData bool       `json:"no_data"`
+	Data   []CandleReponse `json:"data"`
+	NoData bool            `json:"no_data"`
 }
 
 // TabdealOHLC scrapes OHLC data from tabdeal API.
@@ -54,15 +54,19 @@ type TabdealOHLC struct {
 	rateLimiter *rate.Limiter
 }
 
-// NewTabdealOHLCScraper creates a new tabdeal OHLC scraper.
-func NewTabdealOHLCScraper(writer scraper.MessageWriter, logger *slog.Logger) *TabdealOHLC {
+// NewTabdealCandleScraper creates a new tabdeal candle scraper.
+func NewTabdealCandleScraper(writer scraper.MessageWriter, logger *slog.Logger) *TabdealOHLC {
 	return &TabdealOHLC{
 		sender: scraper.NewSender(writer, logger),
-		logger: logger.With("scraper", "tabdeal-ohlc"),
+		logger: logger.With("scraper", "tabdeal-candle"),
 	}
 }
 
-func (r *TabdealOHLC) Name() string { return "tabdeal-ohlc" }
+func NewTabdealOHLCScraper(writer scraper.MessageWriter, logger *slog.Logger) *TabdealOHLC {
+	return NewTabdealCandleScraper(writer, logger)
+}
+
+func (r *TabdealOHLC) Name() string { return "tabdeal-candle" }
 
 // Run starts the OHLC scraper with a daily schedule at 4:30 AM Tehran time.
 // It waits until 4:30 AM, fetches all symbols, then waits for next day's 4:30 AM.
@@ -86,7 +90,13 @@ func (r *TabdealOHLC) Run(ctx context.Context) error {
 			next = next.Add(24 * time.Hour)
 		}
 
-		r.logger.Info("next OHLC fetch scheduled", "at", next.Format(time.RFC3339), "in", time.Until(next).Round(time.Minute))
+		r.logger.Info(
+			"next OHLC fetch scheduled",
+			"at",
+			next.Format(time.RFC3339),
+			"in",
+			time.Until(next).Round(time.Minute),
+		)
 
 		select {
 		case <-ctx.Done():
@@ -166,12 +176,11 @@ func (r *TabdealOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 	}
 
 	cleanedSymbol := scraper.NormalizeSymbol("tabdeal", symbol)
-	var candles []*proto.OHLCData
 
 	for _, data := range candleResponse.Data {
 		openTime := scraper.UnixToRFC3339(int64(data.Timestamp))
-		ohlc := &proto.OHLCData{
-			Id:       scraper.GenerateOHLCID("tabdeal", cleanedSymbol, "1d", openTime),
+		candle := &proto.CandleData{
+			Id:       scraper.GenerateCandleID("tabdeal", cleanedSymbol, "1d", openTime),
 			Exchange: "tabdeal",
 			Symbol:   cleanedSymbol,
 			Interval: "1d",
@@ -182,12 +191,12 @@ func (r *TabdealOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 			Volume:   data.Volume,
 			OpenTime: openTime,
 		}
-		candles = append(candles, ohlc)
-	}
-	// Convert each candle to proto and send
-	if err := r.sender.SendOHLCBatch(ctx, candles); err != nil {
-		// TODO: add metric
-		r.logger.Debug("send error", "error", err)
+
+		// Convert each candle to proto and send
+		if err := r.sender.SendCandle(ctx, candle); err != nil {
+			// TODO: add metric
+			r.logger.Debug("send error", "error", err)
+		}
 	}
 
 	return nil

@@ -1,5 +1,5 @@
-// This file implements OHLC (candlestick) data scraping.
-// There is no doc for this API, found it in their homepage
+// This file implements candle data scraping.
+// There is no doc for this API, found it in their homepage.
 //
 // Response format:
 // [
@@ -24,16 +24,17 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"nobitex/radar/internal/proto"
-	"nobitex/radar/internal/scraper"
 	"strconv"
 	"sync"
 	"time"
 
+	"nobitex/radar/internal/proto"
+	"nobitex/radar/internal/scraper"
+
 	"golang.org/x/time/rate"
 )
 
-type OHLCResponse struct {
+type CandleResponse struct {
 	Timestamp float64 `json:"ts"`
 	Open      float64 `json:"open"`
 	High      string  `json:"high"`
@@ -42,9 +43,9 @@ type OHLCResponse struct {
 	Volume    any     `json:"volume"`
 }
 
-// BitpinOHLC scrapes OHLC data from Nobitex API.
+// BitpinCandleScraper scrapes candle data from Bitpin API.
 // Runs daily at 4:30 AM Tehran time, fetches data, then waits for next day.
-type BitpinOHLC struct {
+type BitpinCandleScraper struct {
 	sender      *scraper.Sender
 	logger      *slog.Logger
 	rateLimiter *rate.Limiter
@@ -53,53 +54,58 @@ type BitpinOHLC struct {
 	usdtMu    sync.RWMutex
 }
 
-// NewBitpinOHLCScraper creates a new Nobitex OHLC scraper.
-func NewBitpinOHLCScraper(writer scraper.MessageWriter, logger *slog.Logger) *BitpinOHLC {
-	return &BitpinOHLC{
+// NewBitpinCandleScraper creates a new Bitpin candle scraper.
+func NewBitpinCandleScraper(writer scraper.MessageWriter, logger *slog.Logger) *BitpinCandleScraper {
+	return &BitpinCandleScraper{
 		sender: scraper.NewSender(writer, logger),
-		logger: logger.With("scraper", "bipin-ohlc"),
+		logger: logger.With("scraper", "bitpin-candle"),
 	}
 }
 
-func (n *BitpinOHLC) Name() string { return "bipin-ohlc" }
+func NewBitpinCandleScraperScraper(writer scraper.MessageWriter, logger *slog.Logger) *BitpinCandleScraper {
+	return NewBitpinCandleScraper(writer, logger)
+}
 
-// Run starts the OHLC scraper with a daily schedule at 4:30 AM Tehran time.
-// It waits until 4:30 AM, fetches all symbols, then waits for next day's 4:30 AM.
-func (n *BitpinOHLC) Run(ctx context.Context) error {
+func (n *BitpinCandleScraper) Name() string { return "bitpin-candle" }
+
+func (n *BitpinCandleScraper) Run(ctx context.Context) error {
 	tehran, err := time.LoadLocation("Asia/Tehran")
 	if err != nil {
 		return fmt.Errorf("failed to load Tehran timezone: %w", err)
 	}
-	n.logger.Info("starting Bitpin OHLC scraper (scheduled daily at 4:30 AM Tehran)")
+	n.logger.Info("starting Bitpin candle scraper (scheduled daily at 4:30 AM Tehran)")
 	n.usdtPrice = getLatestUSDTPrice()
 	if err := n.fetchAllSymbols(ctx); err != nil {
-		// Log error but don't crash; let the schedule continue
-		n.logger.Error("initial OHLC fetch failed", "error", err)
+		n.logger.Error("initial candle fetch failed", "error", err)
 	}
 
 	for {
-		// Calculate next 4:30 AM Tehran
 		now := time.Now().In(tehran)
 		next := time.Date(now.Year(), now.Month(), now.Day(), 4, 30, 0, 0, tehran)
 		if next.Before(now) {
 			next = next.Add(24 * time.Hour)
 		}
 
-		n.logger.Info("next OHLC fetch scheduled", "at", next.Format(time.RFC3339), "in", time.Until(next).Round(time.Minute))
+		n.logger.Info(
+			"next candle fetch scheduled",
+			"at",
+			next.Format(time.RFC3339),
+			"in",
+			time.Until(next).Round(time.Minute),
+		)
 
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-time.After(time.Until(next)):
 			if err := n.fetchAllSymbols(ctx); err != nil {
-				n.logger.Error("OHLC fetch failed", "error", err)
+				n.logger.Error("candle fetch failed", "error", err)
 			}
 		}
 	}
 }
 
-// fetchAllSymbols fetches OHLC data for all available symbols.
-func (n *BitpinOHLC) fetchAllSymbols(ctx context.Context) error {
+func (n *BitpinCandleScraper) fetchAllSymbols(ctx context.Context) error {
 	symbols, err := fetchMarkets(n.logger)
 	if err != nil {
 		return err
@@ -109,7 +115,7 @@ func (n *BitpinOHLC) fetchAllSymbols(ctx context.Context) error {
 	}
 
 	n.rateLimiter = scraper.DefaultRateLimiter()
-	n.logger.Info("fetching OHLC for symbols", "count", len(symbols))
+	n.logger.Info("fetching candles for symbols", "count", len(symbols))
 
 	for _, symbol := range symbols {
 		select {
@@ -123,19 +129,16 @@ func (n *BitpinOHLC) fetchAllSymbols(ctx context.Context) error {
 		}
 
 		if err := n.fetchOHLC(ctx, symbol); err != nil {
-			n.logger.Warn("Failed to fetch OHLC", "symbol", symbol, "error", err)
+			n.logger.Warn("failed to fetch candle", "symbol", symbol, "error", err)
 			continue
 		}
 	}
 
-	n.logger.Info("OHLC fetch completed", "symbols", len(symbols))
+	n.logger.Info("candle fetch completed", "symbols", len(symbols))
 	return nil
 }
 
-// fetchOHLC fetches OHLC data for a single symbol (last 30 days).
-// Retries up to 3 times on timeout/connection errors with 2 second delay.
-func (n *BitpinOHLC) fetchOHLC(ctx context.Context, symbol string) error {
-	// Fetch last 30 days of daily OHLC
+func (n *BitpinCandleScraper) fetchOHLC(ctx context.Context, symbol string) error {
 	fromTimestamp := scraper.ToMidnight(time.Now().AddDate(0, 0, -3)).Unix()
 	toTimestamp := scraper.ToMidnight(time.Now()).AddDate(0, 0, -1).Unix()
 
@@ -155,27 +158,24 @@ func (n *BitpinOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 		return fmt.Errorf("status %d", resp.StatusCode)
 	}
 
-	var data []OHLCResponse
+	var data []CandleResponse
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return err
 	}
 
-	// Validate parallel arrays have same length
 	length := len(data)
 	if length == 0 {
-		return nil // No data
+		return nil
 	}
 
 	cleanedSymbol := scraper.NormalizeSymbol("bitpin", symbol)
 
-	// Update USDT price if this is USDT/IRT
 	if cleanedSymbol == "USDT/IRT" && length > 0 {
 		n.usdtMu.Lock()
 		n.usdtPrice = scraper.NormalizePrice(cleanedSymbol, data[length-1].Close)
 		n.usdtMu.Unlock()
 	}
 
-	// Convert each candle to proto and send
 	for _, d := range data {
 		openTime := scraper.UnixToRFC3339(int64(d.Timestamp))
 		high, err := strconv.ParseFloat(d.High, 64)
@@ -190,17 +190,13 @@ func (n *BitpinOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 
 		switch volume := d.Volume.(type) {
 		case string:
-			{
-				volumeParsed, _ = strconv.ParseFloat(volume, 64)
-			}
+			volumeParsed, _ = strconv.ParseFloat(volume, 64)
 		case float64:
-			{
-				volumeParsed = volume
-			}
+			volumeParsed = volume
 		}
 
-		ohlc := &proto.OHLCData{
-			Id:        scraper.GenerateOHLCID("bitpin", cleanedSymbol, "1d", openTime),
+		candle := &proto.CandleData{
+			Id:        scraper.GenerateCandleID("bitpin", cleanedSymbol, "1d", openTime),
 			Exchange:  "bitpin",
 			Symbol:    cleanedSymbol,
 			Interval:  "1d",
@@ -213,7 +209,7 @@ func (n *BitpinOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 			OpenTime:  openTime,
 		}
 
-		if err := n.sender.SendOHLC(ctx, ohlc); err != nil {
+		if err := n.sender.SendCandle(ctx, candle); err != nil {
 			n.logger.Debug("send error", "error", err)
 		}
 	}

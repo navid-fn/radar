@@ -47,41 +47,41 @@ func main() {
 		},
 	)
 
-	// OHLC ingester kafka reader and ingester
-	ohlcReader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:        []string{appConfig.KafkaOHLC.Broker},
-		Topic:          appConfig.KafkaOHLC.Topic,
-		GroupID:        appConfig.KafkaOHLC.GroupID,
+	// candle ingester kafka reader and ingester
+	candleReader := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:        []string{appConfig.KafkaCandle.Broker},
+		Topic:          appConfig.KafkaCandle.Topic,
+		GroupID:        appConfig.KafkaCandle.GroupID,
 		MinBytes:       10e3,
 		MaxBytes:       10e6,
 		CommitInterval: 0,
 	})
 
-	ohlcIngester := ingester.NewOHLCIngester(
-		ohlcReader,
+	candleIngester := ingester.NewCandleIngester(
+		candleReader,
 		store,
-		logger.With("ingester", "ohlc"),
-		ingester.OHLCIngesterConfig{
+		logger.With("ingester", "candle"),
+		ingester.CandleIngesterConfig{
 			BatchSize:    appConfig.Ingester.BatchSize,
 			BatchTimeout: time.Duration(appConfig.Ingester.BatchTimeoutSeconds) * time.Second,
 		},
 	)
 
-	// OHLC ingester kafka reader and ingester
-	depthReader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:        []string{appConfig.KafkaDepth.Broker},
-		Topic:          appConfig.KafkaDepth.Topic,
-		GroupID:        appConfig.KafkaDepth.GroupID,
+	// orderbook ingester kafka reader and ingester
+	orderbookReader := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:        []string{appConfig.KafkaOrderbook.Broker},
+		Topic:          appConfig.KafkaOrderbook.Topic,
+		GroupID:        appConfig.KafkaOrderbook.GroupID,
 		MinBytes:       10e3,
 		MaxBytes:       10e6,
 		CommitInterval: 0,
 	})
 
-	depthIngester := ingester.NewDepthIngester(
-		depthReader,
+	orderbookIngester := ingester.NewOrderbookIngester(
+		orderbookReader,
 		store,
-		logger.With("ingester", "depths"),
-		ingester.DepthIngesterConfig{
+		logger.With("ingester", "orderbook"),
+		ingester.OrderbookIngesterConfig{
 			BatchSize:    appConfig.Ingester.BatchSize,
 			BatchTimeout: time.Duration(appConfig.Ingester.BatchTimeoutSeconds) * time.Second,
 		},
@@ -96,15 +96,15 @@ func main() {
 
 		// close kafka readers
 		tradeReader.Close()
-		ohlcReader.Close()
-		depthReader.Close()
+		candleReader.Close()
+		orderbookReader.Close()
 
 		defer stop()
 	}
 	logger.Info("Ingester started",
 		"trade_topic", appConfig.KafkaTrade.Topic,
-		"ohlc_topic", appConfig.KafkaOHLC.Topic,
-		"depth_topic", appConfig.KafkaDepth.Topic,
+		"candle_topic", appConfig.KafkaCandle.Topic,
+		"orderbook_topic", appConfig.KafkaOrderbook.Topic,
 	)
 
 	// Run both ingesters in parallel
@@ -121,16 +121,16 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := ohlcIngester.Start(ctx); err != nil && ctx.Err() == nil {
-			logger.Error("ohlc ingester error", "error", err)
+		if err := candleIngester.Start(ctx); err != nil && ctx.Err() == nil {
+			logger.Error("candle ingester error", "error", err)
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := depthIngester.Start(ctx); err != nil && ctx.Err() == nil {
-			logger.Error("depth ingester error", "error", err)
+		if err := orderbookIngester.Start(ctx); err != nil && ctx.Err() == nil {
+			logger.Error("orderbook ingester error", "error", err)
 		}
 	}()
 

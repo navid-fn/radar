@@ -30,9 +30,9 @@ import (
 type scraperType string
 
 const (
-	scraperTypeTrade scraperType = "trade"
-	scraperTypeOHLC  scraperType = "ohlc"
-	scraperTypeDepth scraperType = "depth"
+	scraperTypeTrade     scraperType = "trade"
+	scraperTypeCandle    scraperType = "candle"
+	scraperTypeOrderbook scraperType = "orderbook"
 )
 
 // validExchanges lists all supported exchange names.
@@ -66,10 +66,10 @@ func (d *DebugWriter) processMessage(data []byte) {
 	switch d.dataType {
 	case scraperTypeTrade:
 		d.processTrade(data)
-	case scraperTypeOHLC:
-		d.processOHLC(data)
-	case scraperTypeDepth:
-		d.processDepth(data)
+	case scraperTypeCandle:
+		d.processCandle(data)
+	case scraperTypeOrderbook:
+		d.processOrderbook(data)
 	}
 }
 
@@ -78,20 +78,6 @@ func (d *DebugWriter) matchesSymbol(symbol string) bool {
 }
 
 func (d *DebugWriter) processTrade(data []byte) {
-	// Try batch first (WebSocket scrapers send batches)
-	batch := &pb.TradeDataBatch{}
-	if err := proto.Unmarshal(data, batch); err == nil && len(batch.GetTrades()) > 0 {
-		for _, t := range batch.GetTrades() {
-			d.total.Add(1)
-			if !d.matchesSymbol(t.GetSymbol()) {
-				continue
-			}
-			d.matched.Add(1)
-			printTrade(t)
-		}
-		return
-	}
-
 	// Try single trade (API scrapers send individual trades)
 	trade := &pb.TradeData{}
 	if err := proto.Unmarshal(data, trade); err == nil && trade.GetExchange() != "" {
@@ -100,38 +86,22 @@ func (d *DebugWriter) processTrade(data []byte) {
 			return
 		}
 		d.matched.Add(1)
-		printTrade(trade)
 	}
 }
 
-func (d *DebugWriter) processOHLC(data []byte) {
-	// Try batch first
-	batch := &pb.OHLCDataBatch{}
-	if err := proto.Unmarshal(data, batch); err == nil && len(batch.GetCandles()) > 0 {
-		for _, c := range batch.GetCandles() {
-			d.total.Add(1)
-			if !d.matchesSymbol(c.GetSymbol()) {
-				continue
-			}
-			d.matched.Add(1)
-			printOHLC(c)
-		}
-		return
-	}
-
-	// Try single OHLC
-	ohlc := &pb.OHLCData{}
+func (d *DebugWriter) processCandle(data []byte) {
+	ohlc := &pb.CandleData{}
 	if err := proto.Unmarshal(data, ohlc); err == nil && ohlc.GetExchange() != "" {
 		d.total.Add(1)
 		if !d.matchesSymbol(ohlc.GetSymbol()) {
 			return
 		}
 		d.matched.Add(1)
-		printOHLC(ohlc)
+		printCandle(ohlc)
 	}
 }
 
-func (d *DebugWriter) processDepth(data []byte) {
+func (d *DebugWriter) processOrderbook(data []byte) {
 	snapshot := &pb.OrderBookSnapshot{}
 	if err := proto.Unmarshal(data, snapshot); err == nil && snapshot.GetExchange() != "" {
 		d.total.Add(1)
@@ -139,7 +109,7 @@ func (d *DebugWriter) processDepth(data []byte) {
 			return
 		}
 		d.matched.Add(1)
-		printDepth(snapshot)
+		printOrderbook(snapshot)
 	}
 }
 
@@ -173,15 +143,23 @@ func printTrade(t *pb.TradeData) {
 	)
 }
 
-func printOHLC(c *pb.OHLCData) {
-	fmt.Printf("[OHLC]  %-10s %-12s interval=%-4s O=%-12.2f H=%-12.2f L=%-12.2f C=%-12.2f vol=%-14.2f usdt=%-10.2f open_time=%s\n",
-		c.GetExchange(), c.GetSymbol(), c.GetInterval(),
-		c.GetOpen(), c.GetHigh(), c.GetLow(), c.GetClose(),
-		c.GetVolume(), c.GetUsdtPrice(), toTehran(c.GetOpenTime()),
+func printCandle(c *pb.CandleData) {
+	fmt.Printf(
+		"[CANDLE] %-10s %-12s interval=%-4s O=%-12.2f H=%-12.2f L=%-12.2f C=%-12.2f vol=%-14.2f usdt=%-10.2f open_time=%s\n",
+		c.GetExchange(),
+		c.GetSymbol(),
+		c.GetInterval(),
+		c.GetOpen(),
+		c.GetHigh(),
+		c.GetLow(),
+		c.GetClose(),
+		c.GetVolume(),
+		c.GetUsdtPrice(),
+		toTehran(c.GetOpenTime()),
 	)
 }
 
-func printDepth(s *pb.OrderBookSnapshot) {
+func printOrderbook(s *pb.OrderBookSnapshot) {
 	topBid := "N/A"
 	topAsk := "N/A"
 	if len(s.GetBids()) > 0 {
@@ -192,7 +170,7 @@ func printDepth(s *pb.OrderBookSnapshot) {
 		a := s.GetAsks()[0]
 		topAsk = fmt.Sprintf("%.2f (vol: %.8f)", a.GetPrice(), a.GetVolume())
 	}
-	fmt.Printf("[DEPTH] %-10s %-12s bids=%d asks=%d top_bid=%s top_ask=%s updated=%s\n",
+	fmt.Printf("[ORDERBOOK] %-10s %-12s bids=%d asks=%d top_bid=%s top_ask=%s updated=%s\n",
 		s.GetExchange(), s.GetSymbol(),
 		len(s.GetBids()), len(s.GetAsks()),
 		topBid, topAsk, toTehran(s.GetLastUpdate()),
@@ -202,16 +180,18 @@ func printDepth(s *pb.OrderBookSnapshot) {
 // --- main ---
 
 func main() {
-	typeFlag := flag.String("type", "", "scraper type: trade, ohlc, or depth")
+	typeFlag := flag.String("type", "", "scraper type: trade, candle, or orderbook")
 	exchangeFlag := flag.String("exchange", "", "exchange name (comma-separated). omit for all")
 	symbolFlag := flag.String("symbol", "", "symbol to watch (e.g. BTC/IRT, ETH/USDT)")
 	flag.Parse()
 
 	if *typeFlag == "" || *symbolFlag == "" {
-		fmt.Println("Usage: go run cmd/debug/main.go -type=<trade|ohlc|depth> -symbol=<SYMBOL> [-exchange=<name>]")
+		fmt.Println(
+			"Usage: go run cmd/debug/main.go -type=<trade|candle|orderbook> -symbol=<SYMBOL> [-exchange=<name>]",
+		)
 		fmt.Println()
 		fmt.Println("Flags:")
-		fmt.Println("  -type      Required. trade, ohlc, or depth")
+		fmt.Println("  -type      Required. trade, candle, or orderbook")
 		fmt.Println("  -symbol    Required. Symbol to watch (e.g. BTC/IRT, ETH/USDT)")
 		fmt.Println("  -exchange  Optional. Filter by exchange (comma-separated).")
 		fmt.Println("             Available: nobitex, wallex, ramzinex, bitpin, tabdeal")
@@ -219,13 +199,13 @@ func main() {
 		fmt.Println("Examples:")
 		fmt.Println("  go run cmd/debug/main.go -type=trade -symbol=BTC/IRT")
 		fmt.Println("  go run cmd/debug/main.go -type=trade -symbol=BTC/IRT -exchange=nobitex")
-		fmt.Println("  go run cmd/debug/main.go -type=depth -symbol=ETH/USDT -exchange=nobitex,wallex")
+		fmt.Println("  go run cmd/debug/main.go -type=orderbook -symbol=ETH/USDT -exchange=nobitex,wallex")
 		os.Exit(1)
 	}
 
 	selectedType := scraperType(*typeFlag)
-	if selectedType != scraperTypeTrade && selectedType != scraperTypeOHLC && selectedType != scraperTypeDepth {
-		fmt.Printf("Error: invalid type %q. Must be trade, ohlc, or depth.\n", *typeFlag)
+	if selectedType != scraperTypeTrade && selectedType != scraperTypeCandle && selectedType != scraperTypeOrderbook {
+		fmt.Printf("Error: invalid type %q. Must be trade, candle, or orderbook.\n", *typeFlag)
 		os.Exit(1)
 	}
 
@@ -333,7 +313,12 @@ func allowed(filter map[string]bool, exchange string) bool {
 }
 
 // createScrapers builds the appropriate scrapers for the selected type and exchange filter.
-func createScrapers(selectedType scraperType, exchangeFilter map[string]bool, writer scraper.MessageWriter, logger *slog.Logger) []scraper.Scraper {
+func createScrapers(
+	selectedType scraperType,
+	exchangeFilter map[string]bool,
+	writer scraper.MessageWriter,
+	logger *slog.Logger,
+) []scraper.Scraper {
 	var result []scraper.Scraper
 
 	switch selectedType {
@@ -360,39 +345,39 @@ func createScrapers(selectedType scraperType, exchangeFilter map[string]bool, wr
 		}
 		if allowed(exchangeFilter, "tabdeal") {
 			result = append(result,
-				tabdeal.NewTabdealScraper(writer, logger),
+				tabdeal.NewTabdealHttpScraper(writer, logger),
 			)
 		}
 
-	case scraperTypeOHLC:
+	case scraperTypeCandle:
 		if allowed(exchangeFilter, "nobitex") {
-			result = append(result, nobitex.NewNobitexOHLCScraper(writer, logger))
+			result = append(result, nobitex.NewNobitexCandleScraper(writer, logger))
 		}
 		if allowed(exchangeFilter, "wallex") {
-			result = append(result, wallex.NewWallexOHLCScraper(writer, logger))
+			result = append(result, wallex.NewWallexCandleScraper(writer, logger))
 		}
 		if allowed(exchangeFilter, "ramzinex") {
-			result = append(result, ramzinex.NewRamzinexOHLCScraper(writer, logger))
+			result = append(result, ramzinex.NewRamzinexCandleScraper(writer, logger))
 		}
 		if allowed(exchangeFilter, "bitpin") {
-			result = append(result, bitpin.NewBitpinOHLCScraper(writer, logger))
+			result = append(result, bitpin.NewBitpinCandleScraper(writer, logger))
 		}
 		if allowed(exchangeFilter, "tabdeal") {
-			result = append(result, tabdeal.NewTabdealOHLCScraper(writer, logger))
+			result = append(result, tabdeal.NewTabdealCandleScraper(writer, logger))
 		}
 
-	case scraperTypeDepth:
+	case scraperTypeOrderbook:
 		if allowed(exchangeFilter, "nobitex") {
-			result = append(result, nobitex.NewNobitexDepthScraper(writer, logger))
+			result = append(result, nobitex.NewNobitexOrderbookScraper(writer, logger))
 		}
 		if allowed(exchangeFilter, "wallex") {
-			result = append(result, wallex.NewWallexDepthScraper(writer, logger))
+			result = append(result, wallex.NewWallexOrderbookScraper(writer, logger))
 		}
 		if allowed(exchangeFilter, "bitpin") {
-			result = append(result, bitpin.NewBitpinWsDepthScraper(writer, logger))
+			result = append(result, bitpin.NewBitpinOrderbookScraper(writer, logger))
 		}
 		if allowed(exchangeFilter, "ramzinex") {
-			result = append(result, ramzinex.NewRamzinexDepthScraper(writer, logger))
+			result = append(result, ramzinex.NewRamzinexOrderbookScraper(writer, logger))
 		}
 	}
 

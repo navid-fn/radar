@@ -4,7 +4,7 @@ from tabulate import tabulate
 
 # --- CONFIGURATION ---
 BROKER = "localhost:9092"  # Change to "kafka:9092" if inside Docker
-TOPICS = ["radar_depth", "radar_ohlc", "radar_trades"]
+TOPICS = ["radar_orderbook", "radar_candle", "radar_trades"]
 SAMPLE_INTERVAL = 60 * 5
 
 def get_total_offsets(consumer, topics):

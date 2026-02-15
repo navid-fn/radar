@@ -80,9 +80,9 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// OHLCResponse represents the Ramzinex OHLC API response.
+// CandleResponse represents the Ramzinex OHLC API response.
 // Arrays are parallel: t[i], o[i], h[i], l[i], c[i], v[i] form one candle.
-type OHLCResponse struct {
+type CandleResponse struct {
 	Status     string    `json:"s"`
 	Timestamps []int64   `json:"t"`
 	Opens      []float64 `json:"o"`
@@ -103,16 +103,20 @@ type RamzinexOHLC struct {
 	usdtMu         sync.RWMutex
 }
 
-// NewRamzinexOHLCScraper creates a new Ramzinex OHLC scraper.
-func NewRamzinexOHLCScraper(writer scraper.MessageWriter, logger *slog.Logger) *RamzinexOHLC {
+// NewRamzinexCandleScraper creates a new Ramzinex candle scraper.
+func NewRamzinexCandleScraper(writer scraper.MessageWriter, logger *slog.Logger) *RamzinexOHLC {
 	return &RamzinexOHLC{
 		sender:         scraper.NewSender(writer, logger),
-		logger:         logger.With("scraper", "ramzinex-ohlc"),
+		logger:         logger.With("scraper", "ramzinex-candle"),
 		symbolIDToName: make(map[int]string),
 	}
 }
 
-func (r *RamzinexOHLC) Name() string { return "ramzinex-ohlc" }
+func NewRamzinexOHLCScraper(writer scraper.MessageWriter, logger *slog.Logger) *RamzinexOHLC {
+	return NewRamzinexCandleScraper(writer, logger)
+}
+
+func (r *RamzinexOHLC) Name() string { return "ramzinex-candle" }
 
 // Run starts the OHLC scraper with a daily schedule at 4:30 AM Tehran time.
 // It waits until 4:30 AM, fetches all symbols, then waits for next day's 4:30 AM.
@@ -138,7 +142,13 @@ func (r *RamzinexOHLC) Run(ctx context.Context) error {
 			next = next.Add(24 * time.Hour)
 		}
 
-		r.logger.Info("next OHLC fetch scheduled", "at", next.Format(time.RFC3339), "in", time.Until(next).Round(time.Minute))
+		r.logger.Info(
+			"next OHLC fetch scheduled",
+			"at",
+			next.Format(time.RFC3339),
+			"in",
+			time.Until(next).Round(time.Minute),
+		)
 
 		select {
 		case <-ctx.Done():
@@ -201,7 +211,6 @@ func (r *RamzinexOHLC) createURL(symbol string) string {
 	fullURL := ohlcURL + "?" + params.Encode()
 
 	return fullURL
-
 }
 
 // fetchOHLC fetches OHLC data for a single symbol (last 30 days).
@@ -223,7 +232,7 @@ func (r *RamzinexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 		return fmt.Errorf("status %d", resp.StatusCode)
 	}
 
-	var data OHLCResponse
+	var data CandleResponse
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return err
 	}
@@ -256,8 +265,8 @@ func (r *RamzinexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 	for i := range length {
 		openTime := scraper.UnixToRFC3339(data.Timestamps[i])
 
-		ohlc := &proto.OHLCData{
-			Id:        scraper.GenerateOHLCID("ramzinex", cleanedSymbol, "1d", openTime),
+		candle := &proto.CandleData{
+			Id:        scraper.GenerateCandleID("ramzinex", cleanedSymbol, "1d", openTime),
 			Exchange:  "ramzinex",
 			Symbol:    cleanedSymbol,
 			Interval:  "1d",
@@ -269,7 +278,7 @@ func (r *RamzinexOHLC) fetchOHLC(ctx context.Context, symbol string) error {
 			UsdtPrice: r.usdtPrice,
 			OpenTime:  openTime,
 		}
-		if err := r.sender.SendOHLC(ctx, ohlc); err != nil {
+		if err := r.sender.SendCandle(ctx, candle); err != nil {
 			// TODO: add metric
 			r.logger.Debug("send error", "error", err)
 		}

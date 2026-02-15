@@ -5,23 +5,23 @@ import (
 	"context"
 	"time"
 
+	"nobitex/radar/internal/storage/models"
+
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
-
-	"nobitex/radar/internal/models"
 )
 
-// Storage defines the interface for persisting trade and OHLC data.
+// Storage defines the interface for persisting trade, candle, and orderbook data.
 // Implementations must be safe for concurrent use.
 type Storage interface {
 	// CreateTrades inserts a batch of trades into the database.
 	CreateTrades(ctx context.Context, trades []*models.Trade) error
 
-	// CreateOHLC inserts a batch of OHLC candles into the database.
-	CreateOHLC(ctx context.Context, candles []*models.OHLC) error
+	// CreateCandle inserts a batch of candle data into the database.
+	CreateCandle(ctx context.Context, candles []*models.Candle) error
 
 	// CreateDepths inserts a batch of depths into the database
-	CreateDepths(ctx context.Context, depths []*models.Depth) error
+	CreateOrderbook(ctx context.Context, orders []*models.Orderbook) error
 
 	// Close releases database connection resources.
 	Close() error
@@ -101,14 +101,14 @@ func (s *clickhouseStorage) CreateTrades(ctx context.Context, trades []*models.T
 	return batch.Send()
 }
 
-// CreateOHLC inserts OHLC candles using ClickHouse batch insert.
-func (s *clickhouseStorage) CreateOHLC(ctx context.Context, candles []*models.OHLC) error {
+// CreateCandle inserts candle rows using ClickHouse batch insert.
+func (s *clickhouseStorage) CreateCandle(ctx context.Context, candles []*models.Candle) error {
 	if len(candles) == 0 {
 		return nil
 	}
 
 	batch, err := s.conn.PrepareBatch(ctx, `
-		INSERT INTO ohlc (
+		INSERT INTO candle (
 			id, source, symbol, interval,
 			open, high, low, close, volume, usdt_price,
 			open_time, inserted_at
@@ -147,14 +147,14 @@ func (s *clickhouseStorage) Close() error {
 	return s.conn.Close()
 }
 
-// CreateOHLC inserts OHLC candles using ClickHouse batch insert.
-func (s *clickhouseStorage) CreateDepths(ctx context.Context, depths []*models.Depth) error {
-	if len(depths) == 0 {
+// CreateOrderbook inserts orders of orderbook using ClickHouse batch insert.
+func (s *clickhouseStorage) CreateOrderbook(ctx context.Context, orders []*models.Orderbook) error {
+	if len(orders) == 0 {
 		return nil
 	}
 
 	batch, err := s.conn.PrepareBatch(ctx, `
-		INSERT INTO depth (
+		INSERT INTO orderbook (
 			snapshot_id, source, symbol,
 			price, volume, side,
 			last_update
@@ -164,7 +164,7 @@ func (s *clickhouseStorage) CreateDepths(ctx context.Context, depths []*models.D
 		return err
 	}
 
-	for _, d := range depths {
+	for _, d := range orders {
 		err := batch.Append(
 			d.SnapshotID,
 			d.Source,

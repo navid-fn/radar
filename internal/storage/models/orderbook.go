@@ -3,7 +3,7 @@ package models
 import "time"
 
 // represents a single candlestick record in the ClickHouse database.
-type Depth struct {
+type Orderbook struct {
 	// Metadata
 	// Helps group all rows from a single HTTP request together
 	SnapshotID string `json:"snapshot_id"`

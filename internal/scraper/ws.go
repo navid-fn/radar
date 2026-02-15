@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"google.golang.org/protobuf/proto"
 )
 
 // WebSocket connection timeouts and limits
@@ -55,7 +56,7 @@ type WSHandler struct {
 	// OnMessage is called for each incoming WebSocket message.
 	// Return serialized protobuf bytes to send to Kafka, or nil to skip.
 	// The driver is responsible for parsing exchange-specific message formats.
-	OnMessage func(conn *websocket.Conn, msg []byte) ([]byte, error)
+	OnMessage func(conn *websocket.Conn, msg []byte) ([]proto.Message, error)
 }
 
 // WSClient manages a WebSocket connection with automatic reconnection.
@@ -218,14 +219,17 @@ func (c *WSClient) readLoop(ctx context.Context, conn *websocket.Conn) error {
 
 			data, err := c.handler.OnMessage(conn, msg)
 			if err != nil {
-				c.logger.Debug("OnMessage error", "error", err)
+				c.logger.Debug("function OnMessage error", "error", err)
 				continue
 			}
 
-			if data != nil {
-				if err := c.sender.Send(ctx, data); err != nil {
-					// TODO: add metrics?
-					c.logger.Error("Kafka send failed", "error", err)
+			for _, d := range data {
+				byteData, err := proto.Marshal(d)
+				if err != nil {
+					c.logger.Error("error in Marshaling", "error", err)
+				}
+				if err := c.sender.send(ctx, byteData); err != nil {
+					c.logger.Error("kafka send failed", "error", err)
 				}
 			}
 

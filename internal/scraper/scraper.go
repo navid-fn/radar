@@ -11,11 +11,11 @@ import (
 	"net/http"
 	"time"
 
+	pb "nobitex/radar/internal/proto"
+
 	"github.com/segmentio/kafka-go"
 	"golang.org/x/time/rate"
 	"google.golang.org/protobuf/proto"
-
-	pb "nobitex/radar/internal/proto"
 )
 
 // HTTPClient is a shared HTTP client with timeout for all scrapers.
@@ -56,7 +56,7 @@ func NewSender(writer MessageWriter, logger *slog.Logger) *Sender {
 
 // Send sends raw bytes to Kafka.
 // Returns nil if context was cancelled (graceful shutdown).
-func (s *Sender) Send(ctx context.Context, data []byte) error {
+func (s *Sender) send(ctx context.Context, data []byte) error {
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -74,17 +74,7 @@ func (s *Sender) SendTrade(ctx context.Context, trade *pb.TradeData) error {
 	if err != nil {
 		return fmt.Errorf("serialize failed: %w", err)
 	}
-	return s.Send(ctx, data)
-}
-
-// SendTrades serializes multiple trades as a TradeDataBatch and sends to Kafka.
-// Use this for WebSocket scrapers that receive multiple trades per message.
-func (s *Sender) SendTrades(ctx context.Context, trades []*pb.TradeData) error {
-	data, err := proto.Marshal(&pb.TradeDataBatch{Trades: trades})
-	if err != nil {
-		return fmt.Errorf("serialize batch failed: %w", err)
-	}
-	return s.Send(ctx, data)
+	return s.send(ctx, data)
 }
 
 // GenerateTradeID creates a deterministic unique ID for a trade.
@@ -166,27 +156,23 @@ func DefaultRateLimiter() *rate.Limiter {
 	return NewRateLimiter(60)
 }
 
-// SendOHLC serializes a single OHLC candle to protobuf and sends it to Kafka.
-func (s *Sender) SendOHLC(ctx context.Context, ohlc *pb.OHLCData) error {
-	data, err := proto.Marshal(ohlc)
+// SendCandle serializes a single candle to protobuf and sends it to Kafka.
+func (s *Sender) SendCandle(ctx context.Context, candle *pb.CandleData) error {
+	data, err := proto.Marshal(candle)
 	if err != nil {
-		return fmt.Errorf("serialize OHLC failed: %w", err)
+		return fmt.Errorf("serialize candle failed: %w", err)
 	}
-	return s.Send(ctx, data)
+	return s.send(ctx, data)
 }
 
-func (s *Sender) SendOHLCBatch(ctx context.Context, candels []*pb.OHLCData) error {
-	data, err := proto.Marshal(&pb.OHLCDataBatch{Candles: candels})
-	if err != nil {
-		return fmt.Errorf("serialize batch failed: %w", err)
-	}
-	return s.Send(ctx, data)
-}
-
-// GenerateOHLCID creates a unique ID for an OHLC candle.
+// GenerateCandleID creates a unique ID for a candle.
 // Format: exchange-symbol-interval-openTime
-func GenerateOHLCID(exchange, symbol, interval, openTime string) string {
+func GenerateCandleID(exchange, symbol, interval, openTime string) string {
 	return fmt.Sprintf("%s-%s-%s-%s", exchange, symbol, interval, openTime)
+}
+
+func GenerateOHLCID(exchange, symbol, interval, openTime string) string {
+	return GenerateCandleID(exchange, symbol, interval, openTime)
 }
 
 // ToMidnight returns the start of day (00:00:00) for the given time in UTC.
@@ -202,7 +188,12 @@ func UnixToRFC3339(ts int64) string {
 // DoWithRetry executes an HTTP request with retry on timeout/connection errors.
 // Uses exponential backoff: baseDelay * 2^attempt (e.g., 2s, 4s, 8s).
 // Returns the response and error from the last attempt.
-func DoWithRetry(ctx context.Context, req *http.Request, maxRetries int, baseDelay time.Duration) (*http.Response, error) {
+func DoWithRetry(
+	ctx context.Context,
+	req *http.Request,
+	maxRetries int,
+	baseDelay time.Duration,
+) (*http.Response, error) {
 	var lastErr error
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
@@ -240,5 +231,5 @@ func (s *Sender) SendOrderBookSnapShot(ctx context.Context, orderBookSnapshot *p
 	if err != nil {
 		return fmt.Errorf("serialize failed: %w", err)
 	}
-	return s.Send(ctx, data)
+	return s.send(ctx, data)
 }

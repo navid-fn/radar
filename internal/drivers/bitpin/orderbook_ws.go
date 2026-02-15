@@ -46,7 +46,7 @@ import (
 // TODO: we can use config for reading/changing this interval later
 const snapshotInterval = 5 * time.Minute
 
-type BitpinDepthWS struct {
+type BitpinOrderbookWSScraper struct {
 	sender     *scraper.Sender
 	logger     *slog.Logger
 	depthStore map[string]*pb.OrderBookSnapshot
@@ -57,25 +57,21 @@ type BitpinDepthWS struct {
 	lastSnapshotTime time.Time
 }
 
-func NewBitpinWsDepthScraper(writer scraper.MessageWriter, logger *slog.Logger) *BitpinDepthWS {
-	return &BitpinDepthWS{
+func NewBitpinOrderbookScraper(writer scraper.MessageWriter, logger *slog.Logger) *BitpinOrderbookWSScraper {
+	return &BitpinOrderbookWSScraper{
 		sender:     scraper.NewSender(writer, logger),
-		logger:     logger.With("scraper", "bitpin-ws-depth"),
+		logger:     logger.With("scraper", "bitpin-orderbook-ws"),
 		depthStore: make(map[string]*pb.OrderBookSnapshot),
 	}
 }
 
-func (b *BitpinDepthWS) Name() string { return "bitpin-ws-depth" }
+func NewBitpinWsDepthScraper(writer scraper.MessageWriter, logger *slog.Logger) *BitpinOrderbookWSScraper {
+	return NewBitpinOrderbookScraper(writer, logger)
+}
 
-// Run starts the depth data collection with 5-minute snapshots.
-//
-// The scraper:
-//  1. Connects to WebSocket and stays connected
-//  2. Continuously receives and stores depth updates
-//  3. Sends snapshots to Kafka only at 5-minute boundaries (12:00, 12:05, etc.)
-//
-// The method blocks until the context is cancelled.
-func (b *BitpinDepthWS) Run(ctx context.Context) error {
+func (b *BitpinOrderbookWSScraper) Name() string { return "bitpin-orderbook-ws" }
+
+func (b *BitpinOrderbookWSScraper) Run(ctx context.Context) error {
 	b.logger.Info("starting Bitpin depth WebSocket scraper",
 		"snapshot_interval", snapshotInterval)
 	markets, err := fetchMarkets(b.logger)
@@ -94,7 +90,7 @@ func (b *BitpinDepthWS) Run(ctx context.Context) error {
 	return nil
 }
 
-func (b *BitpinDepthWS) createClient() *scraper.WSClient {
+func (b *BitpinOrderbookWSScraper) createClient() *scraper.WSClient {
 	config := scraper.WSConfig{URL: wsURL, PingDisabled: true}
 	handler := scraper.WSHandler{
 		OnConnect:   b.onConnect,
@@ -104,11 +100,11 @@ func (b *BitpinDepthWS) createClient() *scraper.WSClient {
 	return scraper.NewWSClient(config, handler, b.sender, b.logger)
 }
 
-func (b *BitpinDepthWS) onConnect(conn *websocket.Conn) error {
+func (b *BitpinOrderbookWSScraper) onConnect(conn *websocket.Conn) error {
 	return conn.WriteJSON(map[string]any{"id": 1, "connect": map[string]any{}})
 }
 
-func (b *BitpinDepthWS) onSubscribe(conn *websocket.Conn, symbols []string) error {
+func (b *BitpinOrderbookWSScraper) onSubscribe(conn *websocket.Conn, symbols []string) error {
 	for i, sym := range symbols {
 		msg := map[string]any{
 			"id":        i + 2,
@@ -121,21 +117,16 @@ func (b *BitpinDepthWS) onSubscribe(conn *websocket.Conn, symbols []string) erro
 	return nil
 }
 
-// onMessage handles incoming WebSocket messages.
-// It updates the depth store and sends snapshots at minute boundaries.
-func (b *BitpinDepthWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, error) {
-	// Parse and store the depth data
+func (b *BitpinOrderbookWSScraper) onMessage(conn *websocket.Conn, message []byte) ([]proto.Message, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(message))
 	for scanner.Scan() {
 		if snapshot := b.parseLine(conn, scanner.Bytes()); snapshot != nil {
-			// Store the latest snapshot for this symbol
 			b.mu.Lock()
 			b.depthStore[snapshot.Symbol] = snapshot
 			b.mu.Unlock()
 		}
 	}
 
-	// Check if we should send snapshots (at snapshotInterval boundary)
 	now := time.Now()
 	currentInterval := now.Truncate(snapshotInterval)
 
@@ -146,29 +137,21 @@ func (b *BitpinDepthWS) onMessage(conn *websocket.Conn, message []byte) ([]byte,
 	}
 	b.mu.Unlock()
 
-	// Send snapshots at interval boundary
 	if shouldSend {
 		b.sendMinuteSnapshots(now)
 	}
 
-	// Don't return data here - we handle sending in sendMinuteSnapshots
 	return nil, nil
 }
 
-// sendMinuteSnapshots sends all current depth snapshots to Kafka.
-// Called once per snapshotInterval at the interval boundary.
-func (b *BitpinDepthWS) sendMinuteSnapshots(snapshotTime time.Time) {
+func (b *BitpinOrderbookWSScraper) sendMinuteSnapshots(snapshotTime time.Time) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	// Convert to UTC and truncate to snapshotInterval boundary
 	intervalTime := snapshotTime.UTC().Truncate(snapshotInterval)
 	timeStr := intervalTime.Format(time.RFC3339)
 
-	sentCount := 0
-
 	for symbol, snapshot := range b.depthStore {
-		// Update the snapshot with minute-boundary timestamp
 		snapshotToSend := &pb.OrderBookSnapshot{
 			Id:         scraper.GenerateSnapShotID("bitpin", symbol, timeStr),
 			Exchange:   "bitpin",
@@ -178,25 +161,14 @@ func (b *BitpinDepthWS) sendMinuteSnapshots(snapshotTime time.Time) {
 			Asks:       snapshot.Asks,
 		}
 
-		// Serialize and send
-		data, err := proto.Marshal(snapshotToSend)
-		if err != nil {
-			b.logger.Error("Failed to marshal snapshot", "symbol", symbol, "error", err)
-			continue
-		}
-
-		if err := b.sender.Send(context.Background(), data); err != nil {
-			// TODO: add metric
+		if err := b.sender.SendOrderBookSnapShot(context.Background(), snapshotToSend); err != nil {
 			b.logger.Error("failed to send snapshot", "symbol", symbol, "error", err)
 			continue
 		}
-
-		sentCount++
 	}
-
 }
 
-func (b *BitpinDepthWS) parseLine(conn *websocket.Conn, message []byte) *pb.OrderBookSnapshot {
+func (b *BitpinOrderbookWSScraper) parseLine(conn *websocket.Conn, message []byte) *pb.OrderBookSnapshot {
 	var msg map[string]any
 	if json.Unmarshal(message, &msg) != nil {
 		return nil
@@ -241,7 +213,7 @@ func (b *BitpinDepthWS) parseLine(conn *websocket.Conn, message []byte) *pb.Orde
 	return b.createDepth(data)
 }
 
-func (b *BitpinDepthWS) createDepth(data depthResponse) *pb.OrderBookSnapshot {
+func (b *BitpinOrderbookWSScraper) createDepth(data depthResponse) *pb.OrderBookSnapshot {
 	cleanedSymbol := scraper.NormalizeSymbol("bitpin", data.Symbol)
 
 	asks := []*pb.OrderLevel{}

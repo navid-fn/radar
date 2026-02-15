@@ -2,8 +2,8 @@ package models
 
 import "time"
 
-// OHLC represents a single candlestick record in the ClickHouse database.
-type OHLC struct {
+// Candle represents a single candlestick record in the ClickHouse database.
+type Candle struct {
 	// ID is a unique identifier: exchange-symbol-interval-openTime
 	ID string `json:"id"`
 

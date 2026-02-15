@@ -77,7 +77,7 @@ func (b *BitpinWS) onSubscribe(conn *websocket.Conn, symbols []string) error {
 	return nil
 }
 
-func (b *BitpinWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, error) {
+func (b *BitpinWS) onMessage(conn *websocket.Conn, message []byte) ([]proto.Message, error) {
 	var msg map[string]any
 	if json.Unmarshal(message, &msg) != nil {
 		return nil, nil
@@ -164,5 +164,10 @@ func (b *BitpinWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, erro
 	if len(trades) == 0 {
 		return nil, nil
 	}
-	return proto.Marshal(&pb.TradeDataBatch{Trades: trades})
+
+	messages := make([]proto.Message, 0, len(trades))
+	for _, trade := range trades {
+		messages = append(messages, trade)
+	}
+	return messages, nil
 }

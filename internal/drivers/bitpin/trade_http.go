@@ -16,7 +16,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-type BitpinAPI struct {
+type BitpinHttpScraper struct {
 	sender      *scraper.Sender
 	logger      *slog.Logger
 	rateLimiter *rate.Limiter
@@ -24,16 +24,16 @@ type BitpinAPI struct {
 	usdtMu      sync.RWMutex
 }
 
-func NewBitpinAPIScraper(writer scraper.MessageWriter, logger *slog.Logger) *BitpinAPI {
-	return &BitpinAPI{
+func NewBitpinHttpScraper(writer scraper.MessageWriter, logger *slog.Logger) *BitpinHttpScraper {
+	return &BitpinHttpScraper{
 		sender: scraper.NewSender(writer, logger),
 		logger: logger.With("scraper", "bitpin-api"),
 	}
 }
 
-func (b *BitpinAPI) Name() string { return "bitpin-api" }
+func (b *BitpinHttpScraper) Name() string { return "bitpin-api" }
 
-func (b *BitpinAPI) Run(ctx context.Context) error {
+func (b *BitpinHttpScraper) Run(ctx context.Context) error {
 	b.logger.Info("starting Bitpin API scraper")
 	b.usdtPrice = getLatestUSDTPrice()
 
@@ -59,7 +59,7 @@ func (b *BitpinAPI) Run(ctx context.Context) error {
 	return nil
 }
 
-func (b *BitpinAPI) pollSymbol(ctx context.Context, symbol string) {
+func (b *BitpinHttpScraper) pollSymbol(ctx context.Context, symbol string) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -77,7 +77,7 @@ func (b *BitpinAPI) pollSymbol(ctx context.Context, symbol string) {
 	}
 }
 
-func (b *BitpinAPI) fetchTrades(ctx context.Context, symbol string) error {
+func (b *BitpinHttpScraper) fetchTrades(ctx context.Context, symbol string) error {
 	url := fmt.Sprintf(tradesAPI, symbol)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {

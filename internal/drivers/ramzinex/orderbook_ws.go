@@ -52,17 +52,21 @@ type RamzinexDepthWS struct {
 	lastSnapshotTime time.Time
 }
 
-func NewRamzinexDepthScraper(writer scraper.MessageWriter, logger *slog.Logger) *RamzinexDepthWS {
+func NewRamzinexOrderbookScraper(writer scraper.MessageWriter, logger *slog.Logger) *RamzinexDepthWS {
 	return &RamzinexDepthWS{
 		sender:       scraper.NewSender(writer, logger),
-		logger:       logger.With("scraper", "ramzinex-depth-ws"),
+		logger:       logger.With("scraper", "ramzinex-orderbook-ws"),
 		pairIDToName: make(map[int]string),
 
 		depthStore: make(map[string]*pb.OrderBookSnapshot),
 	}
 }
 
-func (r *RamzinexDepthWS) Name() string { return "ramzinex-depth-ws" }
+func NewRamzinexDepthScraper(writer scraper.MessageWriter, logger *slog.Logger) *RamzinexDepthWS {
+	return NewRamzinexOrderbookScraper(writer, logger)
+}
+
+func (r *RamzinexDepthWS) Name() string { return "ramzinex-orderbook-ws" }
 
 func (r *RamzinexDepthWS) fetchPairs() ([]pairDetail, error) {
 	pairs, pairMap, err := fetchPairs()
@@ -139,7 +143,7 @@ func (r *RamzinexDepthWS) onSubscribe(conn *websocket.Conn, pairIDs []string) er
 
 // onMessage handles incoming WebSocket messages.
 // It updates the depth store and sends snapshots at minute boundaries.
-func (r *RamzinexDepthWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, error) {
+func (r *RamzinexDepthWS) onMessage(conn *websocket.Conn, message []byte) ([]proto.Message, error) {
 	// Parse and store the depth data
 	scanner := bufio.NewScanner(bytes.NewReader(message))
 	for scanner.Scan() {
@@ -194,14 +198,7 @@ func (r *RamzinexDepthWS) sendMinuteSnapshots(snapshotTime time.Time) {
 			Asks:       snapshot.Asks,
 		}
 
-		// Serialize and send
-		data, err := proto.Marshal(snapshotToSend)
-		if err != nil {
-			r.logger.Error("Failed to marshal snapshot", "symbol", symbol, "error", err)
-			continue
-		}
-
-		if err := r.sender.Send(context.Background(), data); err != nil {
+		if err := r.sender.SendOrderBookSnapShot(context.Background(), snapshotToSend); err != nil {
 			// TODO: add metric
 			r.logger.Error("failed to send snapshot", "symbol", symbol, "error", err)
 			continue

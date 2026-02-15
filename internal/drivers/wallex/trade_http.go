@@ -16,7 +16,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-type WallexAPI struct {
+type WallexHttpScraper struct {
 	sender      *scraper.Sender
 	logger      *slog.Logger
 	rateLimiter *rate.Limiter
@@ -24,16 +24,16 @@ type WallexAPI struct {
 	usdtMu      sync.RWMutex
 }
 
-func NewWallexAPIScraper(writer scraper.MessageWriter, logger *slog.Logger) *WallexAPI {
-	return &WallexAPI{
+func NewWallexHttpScraper(writer scraper.MessageWriter, logger *slog.Logger) *WallexHttpScraper {
+	return &WallexHttpScraper{
 		sender: scraper.NewSender(writer, logger),
 		logger: logger.With("scraper", "wallex-api"),
 	}
 }
 
-func (w *WallexAPI) Name() string { return "wallex-api" }
+func (w *WallexHttpScraper) Name() string { return "wallex-api" }
 
-func (w *WallexAPI) Run(ctx context.Context) error {
+func (w *WallexHttpScraper) Run(ctx context.Context) error {
 	w.usdtPrice = getLatestUSDTPrice()
 	w.logger.Info("Starting Wallex API scraper")
 
@@ -59,7 +59,7 @@ func (w *WallexAPI) Run(ctx context.Context) error {
 	return nil
 }
 
-func (w *WallexAPI) pollSymbol(ctx context.Context, symbol string) {
+func (w *WallexHttpScraper) pollSymbol(ctx context.Context, symbol string) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -79,7 +79,7 @@ func (w *WallexAPI) pollSymbol(ctx context.Context, symbol string) {
 	}
 }
 
-func (w *WallexAPI) fetchTrades(ctx context.Context, symbol string) error {
+func (w *WallexHttpScraper) fetchTrades(ctx context.Context, symbol string) error {
 	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf(tradesAPI, symbol), nil)
 	if err != nil {
 		return err

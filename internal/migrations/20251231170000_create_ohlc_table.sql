@@ -1,5 +1,5 @@
 -- +goose Up
-CREATE TABLE IF NOT EXISTS ohlc (
+CREATE TABLE IF NOT EXISTS candle (
     id String,
     source LowCardinality(String),
     symbol LowCardinality(String),
@@ -16,5 +16,5 @@ CREATE TABLE IF NOT EXISTS ohlc (
 ORDER BY (source, symbol, interval, open_time);
 
 -- +goose Down
-DROP TABLE IF EXISTS ohlc;
+DROP TABLE IF EXISTS candle;
 

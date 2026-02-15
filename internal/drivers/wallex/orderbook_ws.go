@@ -63,16 +63,20 @@ type WallexDepthWS struct {
 	lastSnapshotTime time.Time
 }
 
-func NewWallexDepthScraper(writer scraper.MessageWriter, logger *slog.Logger) *WallexDepthWS {
+func NewWallexOrderbookScraper(writer scraper.MessageWriter, logger *slog.Logger) *WallexDepthWS {
 	return &WallexDepthWS{
-		sender:             scraper.NewSender(writer, logger),
-		logger:             logger.With("scraper", "wallex-depth-ws"),
+		sender:     scraper.NewSender(writer, logger),
+		logger:     logger.With("scraper", "wallex-orderbook-ws"),
 		depthStore: make(map[string]*symbolDepth),
 	}
 }
 
+func NewWallexDepthScraper(writer scraper.MessageWriter, logger *slog.Logger) *WallexDepthWS {
+	return NewWallexOrderbookScraper(writer, logger)
+}
+
 // Name returns the scraper identifier used for logging and metrics.
-func (w *WallexDepthWS) Name() string { return "wallex-depth" }
+func (w *WallexDepthWS) Name() string { return "wallex-orderbook" }
 
 // Run starts the depth data collection with 5-minute snapshots.
 //
@@ -136,7 +140,7 @@ func (w *WallexDepthWS) onSubscribe(conn *websocket.Conn, symbols []string) erro
 
 // onMessage handles incoming WebSocket messages.
 // It updates the depth store and sends snapshots at minute boundaries.
-func (w *WallexDepthWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, error) {
+func (w *WallexDepthWS) onMessage(conn *websocket.Conn, message []byte) ([]proto.Message, error) {
 	// Skip connection acknowledgment messages
 	msgStr := strings.TrimSpace(string(message))
 	if strings.Contains(msgStr, `"sid":`) {
@@ -245,14 +249,7 @@ func (w *WallexDepthWS) sendMinuteSnapshots(snapshotTime time.Time) {
 			Asks:       depth.asks,
 		}
 
-		// Serialize and send
-		data, err := proto.Marshal(snapshot)
-		if err != nil {
-			w.logger.Error("failed to marshal snapshot", "symbol", symbol, "error", err)
-			continue
-		}
-
-		if err := w.sender.Send(context.Background(), data); err != nil {
+		if err := w.sender.SendOrderBookSnapShot(context.Background(), snapshot); err != nil {
 			w.logger.Error("failed to send snapshot", "symbol", symbol, "error", err)
 			continue
 		}

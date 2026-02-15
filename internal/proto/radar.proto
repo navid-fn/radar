@@ -17,13 +17,9 @@ message TradeData {
   double usdt_price = 9;  // USDT/IRT price at trade time
 }
 
-// TradeDataBatch contains multiple trades (used by WebSocket scrapers).
-message TradeDataBatch {
-  repeated TradeData trades = 1;
-}
 
 // OHLCData represents a single candlestick (Open, High, Low, Close).
-message OHLCData {
+message CandleData {
   string id = 1;          // Unique ID: exchange-symbol-interval-openTime
   string exchange = 2;    // Exchange name
   string symbol = 3;      // Trading pair
@@ -37,10 +33,6 @@ message OHLCData {
   string open_time = 11;  // Candle open time in RFC3339 format
 }
 
-// OHLCDataBatch contains multiple OHLC candles.
-message OHLCDataBatch {
-  repeated OHLCData candles = 1;
-}
 
 // OrderLevel represents a single price level in the order book.
 // We keep this lightweight as it will be repeated hundreds of times.

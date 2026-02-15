@@ -1,6 +1,6 @@
 -- +goose Up
 -- +goose StatementBegin
-CREATE TABLE IF NOT EXISTS radar.depth (
+CREATE TABLE IF NOT EXISTS radar.orderbook (
     snapshot_id String,
     source LowCardinality(String),
     symbol LowCardinality(String),
@@ -17,5 +17,5 @@ min_bytes_for_wide_part = 0;
 
 -- +goose Down
 -- +goose StatementBegin
-DROP TABLE IF EXISTS radar.depth;
+DROP TABLE IF EXISTS radar.orderbook;
 -- +goose StatementEnd

@@ -18,7 +18,7 @@ const (
 	baseAPIURL = "https://api1.tabdeal.org/"
 	tradesURL  = baseAPIURL + "r/api/v1/trades"
 	marketsURL = baseAPIURL + "r/api/v1/exchangeInfo"
-	limit      = 10
+	limit      = 300
 )
 
 type market struct {

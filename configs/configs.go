@@ -23,11 +23,11 @@ type AppConfig struct {
 	// KafkaTrade contains Kafka connection settings for trade data.
 	KafkaTrade KafkaConfig
 
-	// KafkaOHLC contains Kafka connection settings for OHLC data.
-	KafkaOHLC KafkaConfig
+	// KafkaCandle contains Kafka connection settings for candle data.
+	KafkaCandle KafkaConfig
 
-	// KafkaDepth
-	KafkaDepth KafkaConfig
+	// KafkaOrderbook contains Kafka connection settings for orderbook data.
+	KafkaOrderbook KafkaConfig
 
 	// Coingecko contains settings for the CoinGecko scraper.
 	Coingecko CoingeckoConfigs
@@ -109,15 +109,15 @@ func AppLoad() *AppConfig {
 			Topic:   getEnv("KAFKA_TRADE_TOPIC", "radar_trades"),
 			GroupID: getEnv("KAFKA_TRADE_GROUP_ID", "radar-trade-consumer"),
 		},
-		KafkaOHLC: KafkaConfig{
+		KafkaCandle: KafkaConfig{
 			Broker:  getEnv("KAFKA_BROKER", "localhost:9092"),
-			Topic:   getEnv("KAFKA_OHLC_TOPIC", "radar_ohlc"),
-			GroupID: getEnv("KAFKA_OHLC_GROUP_ID", "radar-ohlc-consumer"),
+			Topic:   getEnv("KAFKA_CANDLE_TOPIC", getEnv("KAFKA_OHLC_TOPIC", "radar_candle")),
+			GroupID: getEnv("KAFKA_CANDLE_GROUP_ID", getEnv("KAFKA_OHLC_GROUP_ID", "radar-candle-consumer")),
 		},
-		KafkaDepth: KafkaConfig{
+		KafkaOrderbook: KafkaConfig{
 			Broker:  getEnv("KAFKA_BROKER", "localhost:9092"),
-			Topic:   getEnv("KAFKA_DEPTH_TOPIC", "radar_depth"),
-			GroupID: getEnv("KAFKA_DEPTH_GROUP_ID", "radar-depth-consumer"),
+			Topic:   getEnv("KAFKA_ORDERBOOK_TOPIC", getEnv("KAFKA_DEPTH_TOPIC", "radar_orderbook")),
+			GroupID: getEnv("KAFKA_ORDERBOOK_GROUP_ID", getEnv("KAFKA_DEPTH_GROUP_ID", "radar-orderbook-consumer")),
 		},
 		DBDSN: getDatabaseDSN(),
 		Ingester: IngesterConfig{

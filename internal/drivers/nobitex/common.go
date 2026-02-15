@@ -2,6 +2,7 @@ package nobitex
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,7 +18,7 @@ const (
 	// Doc: https://apidocs.nobitex.ir/#54977c5fca
 	depthAPI         = baseUrl + "v2/depth/%s"
 	marketAPI        = baseUrl + "market/stats"
-	usdtPriceAPI     = baseUrl + "orderbook/USDTIRT"
+	usdtPriceAPI     = baseUrl + "v3/orderbook/USDTIRT"
 	latestTradeAPI   = baseUrl + "v2/trades/%s"
 	depthChannelName = "public:orderbook-"
 
@@ -125,12 +126,15 @@ func getTimeValue(m map[string]any, key string) string {
 func getLatestUSDTPrice() float64 {
 	resp, err := scraper.HTTPClient.Get(usdtPriceAPI)
 	if err != nil {
+		fmt.Println(err)
 		return 0
 	}
 	defer resp.Body.Close()
 
 	var price usdtPrice
 	if err := json.NewDecoder(resp.Body).Decode(&price); err != nil {
+
+		fmt.Println(err)
 		return 0
 	}
 	usdtPriceFloat, _ := strconv.ParseFloat(price.USDTPrice, 64)

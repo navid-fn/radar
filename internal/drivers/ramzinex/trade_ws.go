@@ -99,7 +99,7 @@ func (r *RamzinexWS) onSubscribe(conn *websocket.Conn, pairIDs []string) error {
 	return nil
 }
 
-func (r *RamzinexWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, error) {
+func (r *RamzinexWS) onMessage(conn *websocket.Conn, message []byte) ([]proto.Message, error) {
 	msgStr := strings.TrimSpace(string(message))
 	if msgStr == "{}" || msgStr == "{}\n" {
 		conn.WriteJSON(map[string]any{})
@@ -178,8 +178,11 @@ func (r *RamzinexWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, er
 	if len(trades) == 0 {
 		return nil, nil
 	}
-	return proto.Marshal(&pb.TradeDataBatch{Trades: trades})
-
+	messages := make([]proto.Message, 0, len(trades))
+	for _, trade := range trades {
+		messages = append(messages, trade)
+	}
+	return messages, nil
 }
 
 func (r *RamzinexWS) fetchPairs() ([]pairDetail, error) {

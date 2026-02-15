@@ -68,16 +68,20 @@ type NobitexDepthWS struct {
 	lastSnapshotTime time.Time
 }
 
-func NewNobitexDepthScraper(writer scraper.MessageWriter, logger *slog.Logger) *NobitexDepthWS {
+func NewNobitexOrderbookScraper(writer scraper.MessageWriter, logger *slog.Logger) *NobitexDepthWS {
 	return &NobitexDepthWS{
 		sender:     scraper.NewSender(writer, logger),
-		logger:     logger.With("scraper", "nobitex-depth-ws"),
+		logger:     logger.With("scraper", "nobitex-orderbook-ws"),
 		depthStore: make(map[string]*pb.OrderBookSnapshot),
 	}
 }
 
+func NewNobitexDepthScraper(writer scraper.MessageWriter, logger *slog.Logger) *NobitexDepthWS {
+	return NewNobitexOrderbookScraper(writer, logger)
+}
+
 // Name returns the scraper identifier used for logging and metrics.
-func (n *NobitexDepthWS) Name() string { return "nobitex-depth" }
+func (n *NobitexDepthWS) Name() string { return "nobitex-orderbook" }
 
 // Run starts the depth data collection with 5-minute snapshots.
 //
@@ -138,7 +142,7 @@ func (n *NobitexDepthWS) onSubscribe(conn *websocket.Conn, symbols []string) err
 
 // onMessage handles incoming WebSocket messages.
 // It updates the depth store and sends snapshots at minute boundaries.
-func (n *NobitexDepthWS) onMessage(conn *websocket.Conn, message []byte) ([]byte, error) {
+func (n *NobitexDepthWS) onMessage(conn *websocket.Conn, message []byte) ([]proto.Message, error) {
 	// Parse and store the depth data
 	scanner := bufio.NewScanner(bytes.NewReader(message))
 	for scanner.Scan() {
@@ -193,14 +197,7 @@ func (n *NobitexDepthWS) sendMinuteSnapshots(snapshotTime time.Time) {
 			Asks:       snapshot.Asks,
 		}
 
-		// Serialize and send
-		data, err := proto.Marshal(snapshotToSend)
-		if err != nil {
-			n.logger.Error("Failed to marshal snapshot", "symbol", symbol, "error", err)
-			continue
-		}
-
-		if err := n.sender.Send(context.Background(), data); err != nil {
+		if err := n.sender.SendOrderBookSnapShot(context.Background(), snapshotToSend); err != nil {
 			// TODO: add metric
 			n.logger.Error("failed to send snapshot", "symbol", symbol, "error", err)
 			continue
