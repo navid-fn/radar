@@ -205,7 +205,6 @@ func (n *NobitexDepthWS) sendMinuteSnapshots(snapshotTime time.Time) {
 
 		sentCount++
 	}
-
 }
 
 func (n *NobitexDepthWS) parseLine(conn *websocket.Conn, line []byte) *pb.OrderBookSnapshot {
@@ -280,7 +279,7 @@ func (n *NobitexDepthWS) createDepth(data depthResponse, symbol string) *pb.Orde
 		if price == 0 {
 			continue
 		}
-		volume, _ := strconv.ParseFloat(a[0], 64)
+		volume, _ := strconv.ParseFloat(a[1], 64)
 		if volume == 0 {
 			continue
 		}
@@ -294,7 +293,7 @@ func (n *NobitexDepthWS) createDepth(data depthResponse, symbol string) *pb.Orde
 		if price == 0 {
 			continue
 		}
-		volume, _ := strconv.ParseFloat(b[0], 64)
+		volume, _ := strconv.ParseFloat(b[1], 64)
 		if volume == 0 {
 			continue
 		}

@@ -37,7 +37,7 @@ func (b *BitpinHttpScraper) Run(ctx context.Context) error {
 	b.logger.Info("starting Bitpin API scraper")
 	b.usdtPrice = getLatestUSDTPrice()
 
-	symbols, err := fetchMarkets(b.logger)
+	symbols, err := fetchMarkets(ctx, b.logger)
 	if err != nil {
 		return err
 	}

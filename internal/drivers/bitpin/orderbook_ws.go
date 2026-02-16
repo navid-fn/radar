@@ -74,7 +74,7 @@ func (b *BitpinOrderbookWSScraper) Name() string { return "bitpin-orderbook-ws" 
 func (b *BitpinOrderbookWSScraper) Run(ctx context.Context) error {
 	b.logger.Info("starting Bitpin depth WebSocket scraper",
 		"snapshot_interval", snapshotInterval)
-	markets, err := fetchMarkets(b.logger)
+	markets, err := fetchMarkets(ctx, b.logger)
 	if err != nil {
 		return err
 	}
@@ -222,7 +222,7 @@ func (b *BitpinOrderbookWSScraper) createDepth(data depthResponse) *pb.OrderBook
 		if price == 0 {
 			continue
 		}
-		volume, _ := strconv.ParseFloat(a[0], 64)
+		volume, _ := strconv.ParseFloat(a[1], 64)
 		if volume == 0 {
 			continue
 		}
@@ -236,7 +236,7 @@ func (b *BitpinOrderbookWSScraper) createDepth(data depthResponse) *pb.OrderBook
 		if price == 0 {
 			continue
 		}
-		volume, _ := strconv.ParseFloat(b[0], 64)
+		volume, _ := strconv.ParseFloat(b[1], 64)
 		if volume == 0 {
 			continue
 		}

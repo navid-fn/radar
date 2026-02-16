@@ -45,14 +45,14 @@ func main() {
 
 	tradeScrapers := []scraper.Scraper{
 		nobitex.NewNobitexScraper(tradeWriter, logger),
-		nobitex.NewNobitexAPIScraper(tradeWriter, logger),
+		nobitex.NewNobitexHttpScraper(tradeWriter, logger),
 		wallex.NewWallexScraper(tradeWriter, logger),
-		wallex.NewWallexAPIScraper(tradeWriter, logger),
+		wallex.NewWallexHttpScraper(tradeWriter, logger),
 		ramzinex.NewRamzinexScraper(tradeWriter, logger),
-		ramzinex.NewRamzinexAPIScraper(tradeWriter, logger),
+		ramzinex.NewRamzinexHttpScraper(tradeWriter, logger),
 		bitpin.NewBitpinScraper(tradeWriter, logger),
 		bitpin.NewBitpinHttpScraper(tradeWriter, logger),
-		tabdeal.NewTabdealScraper(tradeWriter, logger),
+		tabdeal.NewTabdealHttpScraper(tradeWriter, logger),
 		coingecko.NewCoinGeckoScraper(tradeWriter, logger, &appConfig.Coingecko),
 	}
 

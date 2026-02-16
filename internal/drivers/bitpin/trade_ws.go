@@ -34,7 +34,7 @@ func (b *BitpinWS) Name() string { return "bitpin" }
 func (b *BitpinWS) Run(ctx context.Context) error {
 	b.usdtPrice = getLatestUSDTPrice()
 	b.logger.Info("starting Bitpin WebSocket scraper", "usdtPrice", b.usdtPrice)
-	symbols, err := fetchMarkets(b.logger)
+	symbols, err := fetchMarkets(ctx, b.logger)
 	if err != nil {
 		return err
 	}

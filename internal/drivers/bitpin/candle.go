@@ -106,7 +106,7 @@ func (n *BitpinCandleScraper) Run(ctx context.Context) error {
 }
 
 func (n *BitpinCandleScraper) fetchAllSymbols(ctx context.Context) error {
-	symbols, err := fetchMarkets(n.logger)
+	symbols, err := fetchMarkets(ctx, n.logger)
 	if err != nil {
 		return err
 	}

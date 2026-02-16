@@ -1,4 +1,4 @@
-//doc
+// doc
 // response example
 
 // {
@@ -206,8 +206,8 @@ func (r *RamzinexDepthWS) sendMinuteSnapshots(snapshotTime time.Time) {
 
 		sentCount++
 	}
-
 }
+
 func (r *RamzinexDepthWS) parseLine(conn *websocket.Conn, message []byte) *pb.OrderBookSnapshot {
 	msgStr := strings.TrimSpace(string(message))
 	if msgStr == "{}" || msgStr == "{}\n" {
@@ -272,7 +272,7 @@ func (r *RamzinexDepthWS) createDepth(data depthResponse, symbol string) *pb.Ord
 		if price == 0 {
 			continue
 		}
-		volume, _ := a[0].(float64)
+		volume, _ := a[1].(float64)
 		if volume == 0 {
 			continue
 		}
@@ -286,7 +286,7 @@ func (r *RamzinexDepthWS) createDepth(data depthResponse, symbol string) *pb.Ord
 		if price == 0 {
 			continue
 		}
-		volume, _ := b[0].(float64)
+		volume, _ := b[1].(float64)
 		if volume == 0 {
 			continue
 		}

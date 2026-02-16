@@ -86,6 +86,8 @@ func (d *DebugWriter) processTrade(data []byte) {
 			return
 		}
 		d.matched.Add(1)
+
+		printTrade(trade)
 	}
 }
 

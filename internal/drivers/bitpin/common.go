@@ -1,9 +1,11 @@
 package bitpin
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net/http"
 	"sort"
 	"strconv"
 
@@ -52,28 +54,42 @@ type depthResponse struct {
 	Symbol    string     `json:"symbol"`
 }
 
-func fetchMarkets(logger *slog.Logger) ([]string, error) {
-	resp, err := scraper.HTTPClient.Get(marketsAPI)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-	var markets []market
-	if err := json.Unmarshal(body, &markets); err != nil {
-		return nil, err
-	}
-
-	var symbols []string
-	for _, m := range markets {
-		if m.Tradeable {
-			symbols = append(symbols, m.Symbol)
+func fetchMarkets(ctx context.Context, logger *slog.Logger) ([]string, error) {
+	select {
+	case <-ctx.Done():
+		return nil, nil
+	default:
+		var resp *http.Response
+		var err error
+		maxRetry := 3
+		for maxRetry > 0 {
+			resp, err = scraper.HTTPClient.Get(marketsAPI)
+			if err != nil {
+				maxRetry -= 1
+			} else {
+				defer resp.Body.Close()
+				break
+			}
 		}
+		if err != nil {
+			return nil, err
+		}
+		body, _ := io.ReadAll(resp.Body)
+		var markets []market
+		if err := json.Unmarshal(body, &markets); err != nil {
+			return nil, err
+		}
+
+		var symbols []string
+		for _, m := range markets {
+			if m.Tradeable {
+				symbols = append(symbols, m.Symbol)
+			}
+		}
+		sort.Strings(symbols)
+		logger.Info("Fetched markets", "count", len(symbols))
+		return symbols, nil
 	}
-	sort.Strings(symbols)
-	logger.Info("Fetched markets", "count", len(symbols))
-	return symbols, nil
 }
 
 func getLatestUSDTPrice() float64 {
