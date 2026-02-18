@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -15,7 +16,7 @@ import (
 // Load it once at startup using AppLoad().
 type AppConfig struct {
 	// DBDSN is the ClickHouse connection string.
-	DBDSN string
+	ClichhouseDSN string
 
 	// Ingester contains settings for the Kafka-to-ClickHouse ingester.
 	Ingester IngesterConfig
@@ -31,6 +32,10 @@ type AppConfig struct {
 
 	// Coingecko contains settings for the CoinGecko scraper.
 	Coingecko CoingeckoConfigs
+
+	// SnapshotInterval is used for orderbook get interval
+	// for example: every 5 minute, get the orderbook
+	SnapShotInterval time.Duration
 }
 
 // KafkaTradeConfig holds Kafka connection settings for trades.
@@ -100,7 +105,7 @@ func getCoingeckoConfigs() CoingeckoConfigs {
 // AppLoad loads all application configuration from environment variables.
 // It attempts to load a .env file first (for local development).
 // Call this once at application startup.
-func AppLoad() *AppConfig {
+func LoadConfigs() *AppConfig {
 	_ = godotenv.Load() // Ignore error - .env is optional
 
 	return &AppConfig{
@@ -111,20 +116,21 @@ func AppLoad() *AppConfig {
 		},
 		KafkaCandle: KafkaConfig{
 			Broker:  getEnv("KAFKA_BROKER", "localhost:9092"),
-			Topic:   getEnv("KAFKA_CANDLE_TOPIC", getEnv("KAFKA_OHLC_TOPIC", "radar_candle")),
-			GroupID: getEnv("KAFKA_CANDLE_GROUP_ID", getEnv("KAFKA_OHLC_GROUP_ID", "radar-candle-consumer")),
+			Topic:   getEnv("KAFKA_CANDLE_TOPIC", "radar_ohlc"),
+			GroupID: getEnv("KAFKA_CANDLE_GROUP_ID", "radar-ohlc-consumer"),
 		},
 		KafkaOrderbook: KafkaConfig{
 			Broker:  getEnv("KAFKA_BROKER", "localhost:9092"),
-			Topic:   getEnv("KAFKA_ORDERBOOK_TOPIC", getEnv("KAFKA_DEPTH_TOPIC", "radar_orderbook")),
-			GroupID: getEnv("KAFKA_ORDERBOOK_GROUP_ID", getEnv("KAFKA_DEPTH_GROUP_ID", "radar-orderbook-consumer")),
+			Topic:   getEnv("KAFKA_ORDERBOOK_TOPIC", "radar_depth"),
+			GroupID: getEnv("KAFKA_ORDERBOOK_GROUP_ID", "radar-depth-consumer"),
 		},
-		DBDSN: getDatabaseDSN(),
+		ClichhouseDSN: getDatabaseDSN(),
 		Ingester: IngesterConfig{
 			BatchSize:           getEnvInt("BATCH_SIZE", 200),
 			BatchTimeoutSeconds: getEnvInt("BATCH_TIMEOUT_SECONDS", 5),
 		},
-		Coingecko: getCoingeckoConfigs(),
+		Coingecko:        getCoingeckoConfigs(),
+		SnapShotInterval: 60 * time.Minute,
 	}
 }
 

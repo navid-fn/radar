@@ -20,7 +20,8 @@
 // # Collection Strategy
 //
 // The scraper maintains a continuous WebSocket connection but only sends
-// orderbook snapshots to Kafka at 5-minute intervals (e.g., 12:00, 12:05, 12:10).
+// orderbook snapshots to Kafka at custom intervals (e.g., 12:00, 12:05, 12:10
+// if interval is set to 5 minute).
 //
 // How it works:
 //   - Stays connected to WebSocket continuously
@@ -48,10 +49,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// snapshotInterval defines how often to send snapshots
-// TODO: we can use config for reading/changing this interval later
-const snapshotInterval = 5 * time.Minute
-
 // NobitexDepthWS handles WebSocket-based depth data collection from Nobitex.
 // It maintains a continuous connection but only sends snapshots every minute.
 type NobitexDepthWS struct {
@@ -66,18 +63,17 @@ type NobitexDepthWS struct {
 	// lastSnapshotTime tracks the last interval we sent snapshots
 	// to ensure we only send once per snapshotInterval
 	lastSnapshotTime time.Time
+	snapshotInterval time.Duration
 }
 
-func NewNobitexOrderbookScraper(writer scraper.MessageWriter, logger *slog.Logger) *NobitexDepthWS {
+func NewNobitexOrderbookScraper(writer scraper.MessageWriter, logger *slog.Logger,
+	interval time.Duration) *NobitexDepthWS {
 	return &NobitexDepthWS{
-		sender:     scraper.NewSender(writer, logger),
-		logger:     logger.With("scraper", "nobitex-orderbook-ws"),
-		depthStore: make(map[string]*pb.OrderBookSnapshot),
+		sender:           scraper.NewSender(writer, logger),
+		logger:           logger.With("scraper", "nobitex-orderbook-ws"),
+		depthStore:       make(map[string]*pb.OrderBookSnapshot),
+		snapshotInterval: interval,
 	}
-}
-
-func NewNobitexDepthScraper(writer scraper.MessageWriter, logger *slog.Logger) *NobitexDepthWS {
-	return NewNobitexOrderbookScraper(writer, logger)
 }
 
 // Name returns the scraper identifier used for logging and metrics.
@@ -93,7 +89,7 @@ func (n *NobitexDepthWS) Name() string { return "nobitex-orderbook" }
 // The method blocks until the context is cancelled.
 func (n *NobitexDepthWS) Run(ctx context.Context) error {
 	n.logger.Info("starting Nobitex depth WebSocket scraper",
-		"snapshot_interval", snapshotInterval)
+		"snapshot_interval", n.snapshotInterval)
 
 	// Fetch available markets
 	markets, err := fetchMarkets()
@@ -156,7 +152,7 @@ func (n *NobitexDepthWS) onMessage(conn *websocket.Conn, message []byte) ([]prot
 
 	// Check if we should send snapshots (at snapshotInterval boundary)
 	now := time.Now()
-	currentInterval := now.Truncate(snapshotInterval)
+	currentInterval := now.Truncate(n.snapshotInterval)
 
 	n.mu.Lock()
 	shouldSend := !currentInterval.Equal(n.lastSnapshotTime)
@@ -181,7 +177,7 @@ func (n *NobitexDepthWS) sendMinuteSnapshots(snapshotTime time.Time) {
 	defer n.mu.RUnlock()
 
 	// Convert to UTC and truncate to snapshotInterval boundary
-	intervalTime := snapshotTime.UTC().Truncate(snapshotInterval)
+	intervalTime := snapshotTime.UTC().Truncate(n.snapshotInterval)
 	timeStr := intervalTime.Format(time.RFC3339)
 
 	sentCount := 0

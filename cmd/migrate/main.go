@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	cfg := configs.AppLoad()
+	cfg := configs.LoadConfigs()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -24,7 +24,7 @@ func main() {
 	flag.Parse()
 
 	// Connect using native ClickHouse driver
-	db, err := sql.Open("clickhouse", cfg.DBDSN)
+	db, err := sql.Open("clickhouse", cfg.ClichhouseDSN)
 	if err != nil {
 		logger.Error("Failed to connect to database", "error", err)
 		os.Exit(1)

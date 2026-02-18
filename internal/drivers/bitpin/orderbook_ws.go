@@ -42,10 +42,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// snapshotInterval defines how often to send snapshots
-// TODO: we can use config for reading/changing this interval later
-const snapshotInterval = 5 * time.Minute
-
 type BitpinOrderbookWSScraper struct {
 	sender     *scraper.Sender
 	logger     *slog.Logger
@@ -55,25 +51,24 @@ type BitpinOrderbookWSScraper struct {
 	// lastSnapshotTime tracks the last interval we sent snapshots
 	// to ensure we only send once per snapshotInterval
 	lastSnapshotTime time.Time
+	snapshotInterval time.Duration
 }
 
-func NewBitpinOrderbookScraper(writer scraper.MessageWriter, logger *slog.Logger) *BitpinOrderbookWSScraper {
+func NewBitpinWsOrderbookScraper(writer scraper.MessageWriter,
+	logger *slog.Logger, interval time.Duration) *BitpinOrderbookWSScraper {
 	return &BitpinOrderbookWSScraper{
-		sender:     scraper.NewSender(writer, logger),
-		logger:     logger.With("scraper", "bitpin-orderbook-ws"),
-		depthStore: make(map[string]*pb.OrderBookSnapshot),
+		sender:           scraper.NewSender(writer, logger),
+		logger:           logger.With("scraper", "bitpin-orderbook-ws"),
+		depthStore:       make(map[string]*pb.OrderBookSnapshot),
+		snapshotInterval: interval,
 	}
-}
-
-func NewBitpinWsDepthScraper(writer scraper.MessageWriter, logger *slog.Logger) *BitpinOrderbookWSScraper {
-	return NewBitpinOrderbookScraper(writer, logger)
 }
 
 func (b *BitpinOrderbookWSScraper) Name() string { return "bitpin-orderbook-ws" }
 
 func (b *BitpinOrderbookWSScraper) Run(ctx context.Context) error {
 	b.logger.Info("starting Bitpin depth WebSocket scraper",
-		"snapshot_interval", snapshotInterval)
+		"snapshot_interval", b.snapshotInterval)
 	markets, err := fetchMarkets(ctx, b.logger)
 	if err != nil {
 		return err
@@ -128,7 +123,7 @@ func (b *BitpinOrderbookWSScraper) onMessage(conn *websocket.Conn, message []byt
 	}
 
 	now := time.Now()
-	currentInterval := now.Truncate(snapshotInterval)
+	currentInterval := now.Truncate(b.snapshotInterval)
 
 	b.mu.Lock()
 	shouldSend := !currentInterval.Equal(b.lastSnapshotTime)
@@ -148,7 +143,7 @@ func (b *BitpinOrderbookWSScraper) sendMinuteSnapshots(snapshotTime time.Time) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	intervalTime := snapshotTime.UTC().Truncate(snapshotInterval)
+	intervalTime := snapshotTime.UTC().Truncate(b.snapshotInterval)
 	timeStr := intervalTime.Format(time.RFC3339)
 
 	for symbol, snapshot := range b.depthStore {

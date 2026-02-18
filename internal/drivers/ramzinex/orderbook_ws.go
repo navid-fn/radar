@@ -33,10 +33,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// snapshotInterval defines how often to send snapshots
-// TODO: we can use config for reading/changing this interval later
-const snapshotInterval = 1 * time.Minute
-
 type RamzinexDepthWS struct {
 	sender       *scraper.Sender
 	logger       *slog.Logger
@@ -50,20 +46,18 @@ type RamzinexDepthWS struct {
 	// lastSnapshotTime tracks the last interval we sent snapshots
 	// to ensure we only send once per snapshotInterval
 	lastSnapshotTime time.Time
+	snapshotInterval time.Duration
 }
 
-func NewRamzinexOrderbookScraper(writer scraper.MessageWriter, logger *slog.Logger) *RamzinexDepthWS {
+func NewRamzinexOrderbookScraper(writer scraper.MessageWriter, logger *slog.Logger,
+	interval time.Duration) *RamzinexDepthWS {
 	return &RamzinexDepthWS{
-		sender:       scraper.NewSender(writer, logger),
-		logger:       logger.With("scraper", "ramzinex-orderbook-ws"),
-		pairIDToName: make(map[int]string),
-
-		depthStore: make(map[string]*pb.OrderBookSnapshot),
+		sender:           scraper.NewSender(writer, logger),
+		logger:           logger.With("scraper", "ramzinex-orderbook-ws"),
+		pairIDToName:     make(map[int]string),
+		depthStore:       make(map[string]*pb.OrderBookSnapshot),
+		snapshotInterval: interval,
 	}
-}
-
-func NewRamzinexDepthScraper(writer scraper.MessageWriter, logger *slog.Logger) *RamzinexDepthWS {
-	return NewRamzinexOrderbookScraper(writer, logger)
 }
 
 func (r *RamzinexDepthWS) Name() string { return "ramzinex-orderbook-ws" }
@@ -79,7 +73,7 @@ func (r *RamzinexDepthWS) fetchPairs() ([]pairDetail, error) {
 
 func (r *RamzinexDepthWS) Run(ctx context.Context) error {
 	r.logger.Info("starting Nobitex depth WebSocket scraper",
-		"snapshot_interval", snapshotInterval)
+		"snapshot_interval", r.snapshotInterval)
 	pairs, err := r.fetchPairs()
 	if err != nil {
 		return err
@@ -157,7 +151,7 @@ func (r *RamzinexDepthWS) onMessage(conn *websocket.Conn, message []byte) ([]pro
 
 	// Check if we should send snapshots (at snapshotInterval boundary)
 	now := time.Now()
-	currentInterval := now.Truncate(snapshotInterval)
+	currentInterval := now.Truncate(r.snapshotInterval)
 
 	r.mu.Lock()
 	shouldSend := !currentInterval.Equal(r.lastSnapshotTime)
@@ -182,7 +176,7 @@ func (r *RamzinexDepthWS) sendMinuteSnapshots(snapshotTime time.Time) {
 	defer r.mu.RUnlock()
 
 	// Convert to UTC and truncate to snapshotInterval boundary
-	intervalTime := snapshotTime.UTC().Truncate(snapshotInterval)
+	intervalTime := snapshotTime.UTC().Truncate(r.snapshotInterval)
 	timeStr := intervalTime.Format(time.RFC3339)
 
 	sentCount := 0

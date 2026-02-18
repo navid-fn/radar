@@ -16,7 +16,6 @@ const (
 
 	// depthAPI fetches orderbook data
 	// Doc: https://apidocs.nobitex.ir/#54977c5fca
-	depthAPI         = baseUrl + "v2/depth/%s"
 	marketAPI        = baseUrl + "market/stats"
 	usdtPriceAPI     = baseUrl + "v3/orderbook/USDTIRT"
 	latestTradeAPI   = baseUrl + "v2/trades/%s"

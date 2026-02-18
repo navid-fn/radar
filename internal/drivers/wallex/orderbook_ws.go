@@ -36,9 +36,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// snapshotInterval defines how often to send snapshots
-const snapshotInterval = 5 * time.Minute
-
 // symbolDepth holds the latest depth data for a single symbol.
 // Updated continuously but only sent at minute intervals.
 type symbolDepth struct {
@@ -61,18 +58,18 @@ type WallexDepthWS struct {
 	// lastSnapshotTime tracks the last interval we sent snapshots
 	// to ensure we only send once per snapshotInterval
 	lastSnapshotTime time.Time
+
+	snapshotInterval time.Duration
 }
 
-func NewWallexOrderbookScraper(writer scraper.MessageWriter, logger *slog.Logger) *WallexDepthWS {
+func NewWallexOrderbookScraper(writer scraper.MessageWriter, logger *slog.Logger,
+	interval time.Duration) *WallexDepthWS {
 	return &WallexDepthWS{
-		sender:     scraper.NewSender(writer, logger),
-		logger:     logger.With("scraper", "wallex-orderbook-ws"),
-		depthStore: make(map[string]*symbolDepth),
+		sender:           scraper.NewSender(writer, logger),
+		logger:           logger.With("scraper", "wallex-orderbook-ws"),
+		depthStore:       make(map[string]*symbolDepth),
+		snapshotInterval: interval,
 	}
-}
-
-func NewWallexDepthScraper(writer scraper.MessageWriter, logger *slog.Logger) *WallexDepthWS {
-	return NewWallexOrderbookScraper(writer, logger)
 }
 
 // Name returns the scraper identifier used for logging and metrics.
@@ -88,7 +85,7 @@ func (w *WallexDepthWS) Name() string { return "wallex-orderbook" }
 // The method blocks until the context is cancelled.
 func (w *WallexDepthWS) Run(ctx context.Context) error {
 	w.logger.Info("starting Wallex depth WebSocket scraper",
-		"snapshot_interval", snapshotInterval)
+		"snapshot_interval", w.snapshotInterval)
 
 	// Fetch available markets
 	markets, err := fetchMarkets()
@@ -185,7 +182,7 @@ func (w *WallexDepthWS) onMessage(conn *websocket.Conn, message []byte) ([]proto
 
 	// Check if we should send snapshots (at snapshotInterval boundary)
 	now := time.Now()
-	currentInterval := now.Truncate(snapshotInterval)
+	currentInterval := now.Truncate(w.snapshotInterval)
 
 	w.mu.Lock()
 	shouldSend := !currentInterval.Equal(w.lastSnapshotTime)
@@ -227,7 +224,7 @@ func (w *WallexDepthWS) sendMinuteSnapshots(snapshotTime time.Time) {
 	defer w.mu.RUnlock()
 
 	// Convert to UTC and truncate to snapshotInterval boundary
-	intervalTime := snapshotTime.UTC().Truncate(snapshotInterval)
+	intervalTime := snapshotTime.UTC().Truncate(w.snapshotInterval)
 	timeStr := intervalTime.Format(time.RFC3339)
 
 	sentCount := 0

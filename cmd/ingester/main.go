@@ -18,10 +18,10 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	appConfig := configs.AppLoad()
+	appConfig := configs.LoadConfigs()
 
 	// Connect to ClickHouse
-	store, err := storage.NewClickHouseStorage(appConfig.DBDSN)
+	store, err := storage.NewClickHouseStorage(appConfig.ClichhouseDSN)
 	if err != nil {
 		logger.Error("Failed to connect to ClickHouse", "error", err)
 		os.Exit(1)

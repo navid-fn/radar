@@ -33,6 +33,7 @@ const (
 	scraperTypeTrade     scraperType = "trade"
 	scraperTypeCandle    scraperType = "candle"
 	scraperTypeOrderbook scraperType = "orderbook"
+	OrderbookInterval                = 1 * time.Minute
 )
 
 // validExchanges lists all supported exchange names.
@@ -370,16 +371,16 @@ func createScrapers(
 
 	case scraperTypeOrderbook:
 		if allowed(exchangeFilter, "nobitex") {
-			result = append(result, nobitex.NewNobitexOrderbookScraper(writer, logger))
+			result = append(result, nobitex.NewNobitexOrderbookScraper(writer, logger, OrderbookInterval))
 		}
 		if allowed(exchangeFilter, "wallex") {
-			result = append(result, wallex.NewWallexOrderbookScraper(writer, logger))
+			result = append(result, wallex.NewWallexOrderbookScraper(writer, logger, OrderbookInterval))
 		}
 		if allowed(exchangeFilter, "bitpin") {
-			result = append(result, bitpin.NewBitpinOrderbookScraper(writer, logger))
+			result = append(result, bitpin.NewBitpinWsOrderbookScraper(writer, logger, OrderbookInterval))
 		}
 		if allowed(exchangeFilter, "ramzinex") {
-			result = append(result, ramzinex.NewRamzinexOrderbookScraper(writer, logger))
+			result = append(result, ramzinex.NewRamzinexOrderbookScraper(writer, logger, OrderbookInterval))
 		}
 	}
 

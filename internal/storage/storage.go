@@ -27,9 +27,6 @@ type Storage interface {
 	Close() error
 }
 
-// TradeStorage is an alias for backward compatibility.
-type TradeStorage = Storage
-
 // clickhouseStorage implements TradeStorage using native ClickHouse driver.
 // Uses batch inserts for high-throughput data ingestion.
 type clickhouseStorage struct {
@@ -39,7 +36,7 @@ type clickhouseStorage struct {
 // NewClickHouseStorage creates a new ClickHouse storage connection.
 // It parses the DSN, opens a connection, and verifies connectivity with a ping.
 // Returns an error if connection cannot be established within 5 seconds.
-func NewClickHouseStorage(dsn string) (TradeStorage, error) {
+func NewClickHouseStorage(dsn string) (Storage, error) {
 	opts, err := clickhouse.ParseDSN(dsn)
 	if err != nil {
 		return nil, err
@@ -154,7 +151,7 @@ func (s *clickhouseStorage) CreateOrderbook(ctx context.Context, orders []*model
 	}
 
 	batch, err := s.conn.PrepareBatch(ctx, `
-		INSERT INTO orderbook (
+		INSERT INTO order (
 			snapshot_id, source, symbol,
 			price, volume, side,
 			last_update

@@ -22,7 +22,7 @@ import (
 )
 
 func main() {
-	appConfig := configs.AppLoad()
+	appConfig := configs.LoadConfigs()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -89,10 +89,10 @@ func main() {
 
 	// Register orderbook scrapers
 	orderbookScrapers := []scraper.Scraper{
-		nobitex.NewNobitexOrderbookScraper(orderbookWriter, logger),
-		wallex.NewWallexOrderbookScraper(orderbookWriter, logger),
-		bitpin.NewBitpinOrderbookScraper(orderbookWriter, logger),
-		ramzinex.NewRamzinexOrderbookScraper(orderbookWriter, logger),
+		nobitex.NewNobitexOrderbookScraper(orderbookWriter, logger, appConfig.SnapShotInterval),
+		wallex.NewWallexOrderbookScraper(orderbookWriter, logger, appConfig.SnapShotInterval),
+		bitpin.NewBitpinWsOrderbookScraper(orderbookWriter, logger, appConfig.SnapShotInterval),
+		ramzinex.NewRamzinexOrderbookScraper(orderbookWriter, logger, appConfig.SnapShotInterval),
 	}
 
 	scrapers := append(tradeScrapers, candleScrapers...)
